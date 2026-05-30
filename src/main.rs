@@ -1,3 +1,4 @@
+mod ca_signer;
 mod cert_reader;
 mod cli;
 mod commands;

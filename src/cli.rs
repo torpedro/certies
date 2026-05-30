@@ -60,9 +60,9 @@ pub enum Commands {
 
     /// Renew the Certificate Revocation List
     RenewCrl {
-        /// CRL validity period in days
-        #[arg(long, default_value_t = 30)]
-        validity_days: u32,
+        /// CRL validity period in days (prompted if omitted, default 30)
+        #[arg(long)]
+        validity_days: Option<u32>,
     },
 
     /// Delete all certificates and reset the store

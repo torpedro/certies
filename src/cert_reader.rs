@@ -27,6 +27,7 @@ pub struct ClientInfo {
     pub client: String,
     pub device: String,
     pub serial: u64,
+    pub key_type: String,
     pub not_before: DateTime<Utc>,
     pub not_after: DateTime<Utc>,
     pub revoked: bool,
@@ -145,16 +146,30 @@ fn read_cert_info(
 
     let serial = bytes_to_serial(cert.raw_serial());
     let revocation = crl.and_then(|c| c.entries.iter().find(|e| e.serial == serial));
+    let key_type = key_type_from_cert(&cert);
 
     Ok(ClientInfo {
         client: client.to_string(),
         device: device.to_string(),
         serial,
+        key_type,
         not_before: ts(cert.validity().not_before.timestamp()),
         not_after: ts(cert.validity().not_after.timestamp()),
         revoked: revocation.is_some(),
         revoked_at: revocation.map(|e| e.revoked_at),
     })
+}
+
+fn key_type_from_cert(cert: &X509Certificate) -> String {
+    // OID 1.2.840.113549.1.1.1 = rsaEncryption
+    // OID 1.2.840.10045.2.1    = id-ecPublicKey
+    // OID 1.3.101.112          = Ed25519
+    match cert.public_key().algorithm.algorithm.to_id_string().as_str() {
+        "1.2.840.10045.2.1" => "ECDSA".to_string(),
+        "1.3.101.112" => "Ed25519".to_string(),
+        "1.2.840.113549.1.1.1" => "RSA".to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn bytes_to_serial(bytes: &[u8]) -> u64 {

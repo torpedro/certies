@@ -67,7 +67,7 @@ pub fn run(store: &Store, name: Option<String>, validity_days: Option<u32>) -> R
     println!("  Private key: {}", key_path.display());
     println!("  Valid until: {}", expires.format("%Y-%m-%d"));
     println!();
-    renew_crl::run(store, 30)?;
+    renew_crl::run(store, Some(30))?;
 
     Ok(())
 }

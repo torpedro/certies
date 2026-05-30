@@ -4,12 +4,11 @@ use openssl::pkey::PKey;
 use openssl::stack::Stack;
 use openssl::symm::Cipher;
 use openssl::x509::X509;
-use rcgen::{
-    CertificateParams, ExtendedKeyUsagePurpose, KeyPair, KeyUsagePurpose, SerialNumber,
-};
+use rcgen::KeyPair;
 use std::fs;
 use time::Duration;
 
+use crate::ca_signer::CaSigner;
 use crate::store::Store;
 
 pub fn run(
@@ -30,37 +29,22 @@ pub fn run(
     fs::create_dir_all(&client_dir)
         .with_context(|| format!("cannot create {}", client_dir.display()))?;
 
-    let ca_cert_pem = store.read_ca_cert_pem()?;
-    let ca_key_pem = store.read_ca_key_pem()?;
-    let ca_key_pair = KeyPair::from_pem(&ca_key_pem).context("cannot load CA key")?;
-    let ca_params =
-        CertificateParams::from_ca_cert_pem(&ca_cert_pem).context("cannot load CA cert")?;
-    let ca_cert = ca_params.self_signed(&ca_key_pair)?;
-
-    let client_key_pair = KeyPair::generate()?;
-    let now = time::OffsetDateTime::now_utc();
+    let signer = CaSigner::load(store)?;
     let serial = meta.next_serial;
 
-    let mut params = CertificateParams::new(vec![])?;
-    params
-        .distinguished_name
-        .push(rcgen::DnType::CommonName, format!("{client}/{device}"));
-    params.not_before = now;
-    params.not_after = now + Duration::days(validity_days as i64);
-    params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
-    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
-    params.serial_number = Some(SerialNumber::from(serial));
-
-    let cert = params.signed_by(&client_key_pair, &ca_cert, &ca_key_pair)?;
-    let cert_pem = cert.pem();
+    let client_key_pair = KeyPair::generate()?;
     let key_pem = client_key_pair.serialize_pem();
+
+    let cert_pem = signer
+        .sign_client_cert(&format!("{client}/{device}"), &key_pem, serial, validity_days)
+        .context("failed to sign client certificate")?;
 
     let key_password = match key_password {
         Some(pw) => Some(pw),
         None => {
-            let pw = rpassword::prompt_password(
-                format!("Key password for {client}/{device} (Enter to skip): "),
-            )
+            let pw = rpassword::prompt_password(format!(
+                "Key password for {client}/{device} (Enter to skip): "
+            ))
             .context("failed to read key password")?;
             if pw.is_empty() { None } else { Some(pw) }
         }
@@ -76,14 +60,15 @@ pub fn run(
         None => key_pem.as_bytes().to_vec(),
     };
 
-    let password = match p12_password {
+    let p12_password = match p12_password {
         Some(p) => p,
         None => rpassword::prompt_password(format!("P12 password for {client}/{device}: "))
-            .context("failed to read password")?,
+            .context("failed to read P12 password")?,
     };
 
-    let p12_der = build_p12(&device, &key_pem, &cert_pem, &ca_cert_pem, &password)
-        .context("failed to build P12")?;
+    let p12_der =
+        build_p12(&device, &key_pem, &cert_pem, signer.ca_cert_pem(), &p12_password)
+            .context("failed to build P12")?;
 
     let key_path = client_dir.join(format!("{device}.key"));
     let cert_path = client_dir.join(format!("{device}.crt"));
@@ -98,7 +83,7 @@ pub fn run(
     store.save_meta(&meta)?;
 
     let expires = chrono::DateTime::from_timestamp(
-        (now + Duration::days(validity_days as i64)).unix_timestamp(),
+        (time::OffsetDateTime::now_utc() + Duration::days(validity_days as i64)).unix_timestamp(),
         0,
     )
     .unwrap();
@@ -120,12 +105,10 @@ fn build_p12(
     ca_cert_pem: &str,
     password: &str,
 ) -> Result<Vec<u8>> {
-    let pkey = PKey::private_key_from_pem(key_pem.as_bytes())
-        .context("cannot parse private key")?;
-    let cert = X509::from_pem(cert_pem.as_bytes())
-        .context("cannot parse certificate")?;
-    let ca = X509::from_pem(ca_cert_pem.as_bytes())
-        .context("cannot parse CA certificate")?;
+    let pkey =
+        PKey::private_key_from_pem(key_pem.as_bytes()).context("cannot parse private key")?;
+    let cert = X509::from_pem(cert_pem.as_bytes()).context("cannot parse certificate")?;
+    let ca = X509::from_pem(ca_cert_pem.as_bytes()).context("cannot parse CA certificate")?;
 
     let mut ca_chain = Stack::new().context("cannot create cert stack")?;
     ca_chain.push(ca).context("cannot push CA onto stack")?;

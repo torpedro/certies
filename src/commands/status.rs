@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 
+use crate::ca_signer::CaSigner;
 use crate::cert_reader;
 use crate::store::Store;
 
@@ -17,6 +18,7 @@ pub fn run(store: &Store) -> Result<()> {
 
     let now = Utc::now();
     let ca = cert_reader::read_ca_info(store)?;
+    let signer = CaSigner::load(store)?;
     let crl = cert_reader::read_crl_info(store)?;
     let clients = cert_reader::list_clients(store, crl.as_ref())?;
 
@@ -24,6 +26,7 @@ pub fn run(store: &Store) -> Result<()> {
     println!();
     println!("Certificate Authority");
     println!("  Subject:     {}", ca.subject);
+    println!("  Key type:    {}", signer.key_type());
     println!("  Created:     {}", ca.not_before.format("%Y-%m-%d"));
     let ca_days_left = (ca.not_after - now).num_days();
     println!(
@@ -74,11 +77,12 @@ pub fn run(store: &Store) -> Result<()> {
     println!();
 
     let col = 20;
+    let type_col = 8;
     println!(
-        "  {:<col$} {:<col$} {:<8} {:<12} {:<12} {}",
-        "Client", "Device", "Serial", "Created", "Expires", "Status"
+        "  {:<col$} {:<col$} {:<8} {:<type_col$} {:<12} {:<12} {}",
+        "Client", "Device", "Serial", "Key", "Created", "Expires", "Status"
     );
-    println!("  {}", "-".repeat(85));
+    println!("  {}", "-".repeat(95));
 
     for cert in &clients {
         let days_left = (cert.not_after - now).num_days();
@@ -98,10 +102,11 @@ pub fn run(store: &Store) -> Result<()> {
         };
 
         println!(
-            "  {:<col$} {:<col$} #{:<7} {:<12} {:<12} {}",
+            "  {:<col$} {:<col$} #{:<7} {:<type_col$} {:<12} {:<12} {}",
             cert.client,
             cert.device,
             cert.serial,
+            cert.key_type,
             cert.not_before.format("%Y-%m-%d"),
             cert.not_after.format("%Y-%m-%d"),
             status,
