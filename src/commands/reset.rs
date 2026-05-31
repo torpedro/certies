@@ -47,6 +47,6 @@ pub fn run(store: &Store) -> Result<()> {
         }
     }
 
-    println!("Store reset. Run `certies init-ca` to start fresh.");
+    println!("Store reset. Run `certies init` to start fresh.");
     Ok(())
 }

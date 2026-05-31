@@ -96,7 +96,7 @@ impl Store {
                 );
             }
             bail!(
-                "Store at {} is not initialised. Run `certies init-ca` first.",
+                "Store at {} is not initialised. Run `certies init` first.",
                 self.root.display()
             );
         }

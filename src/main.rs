@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     let store = Store::new(root);
 
     match cli.command {
-        Commands::InitCa { name, validity_days } => {
+        Commands::Init { name, validity_days } => {
             commands::init_ca::run(&store, name, validity_days)
         }
         Commands::New { client, device, validity_days, key_password, p12_password } => {

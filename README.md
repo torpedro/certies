@@ -40,13 +40,13 @@ All data is stored in `~/.certies/` by default. Every command accepts `--store <
 
 ## Commands
 
-### `init-ca`
+### `init`
 
 Initialises a new Certificate Authority. Prompts for the CA name and validity period interactively; both can also be passed as flags.
 
 ```sh
-certies init-ca
-certies init-ca --name "My CA" --validity-days 3650
+certies init
+certies init --name "My CA" --validity-days 3650
 ```
 
 An initial (empty) CRL is generated automatically.

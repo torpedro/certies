@@ -15,7 +15,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialise a new Certificate Authority
-    InitCa {
+    Init {
         /// Common name for the CA certificate (prompted if omitted)
         #[arg(long)]
         name: Option<String>,
