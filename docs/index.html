@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certies</title>
+  <meta name="description" content="A small Rust CLI for managing a local certificate authority for mutual TLS client authentication.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Primary">
+      <a class="brand" href="#top">certies</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#commands">Commands</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Mutual TLS certificate management</p>
+        <h1>certies</h1>
+        <p class="lead">
+          A small Rust CLI for managing a local certificate authority for mutual TLS client authentication.
+          Issue, revoke, sync, and inspect client certificates with an OpenSSL-style store layout.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="#install">Install</a>
+          <a class="button secondary" href="https://github.com/torpedro/ssl_cert_manager">View on GitHub</a>
+        </div>
+      </div>
+      <div class="terminal" aria-label="Example certies commands">
+        <div class="terminal-bar">
+          <span></span><span></span><span></span>
+        </div>
+        <pre><code>$ certies init --name "Team Client CA"
+$ certies new alice laptop
+$ certies revoke alice laptop
+$ certies sync user@example.com</code></pre>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="section-heading">
+        <h2>What it manages</h2>
+        <p>certies keeps the CA, client material, revocation database, and server-facing artifacts together.</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature">
+          <h3>Local CA</h3>
+          <p>Create and maintain a private certificate authority for client authentication.</p>
+        </article>
+        <article class="feature">
+          <h3>Client certs</h3>
+          <p>Issue per-user and per-device keys, certificates, and PKCS#12 bundles.</p>
+        </article>
+        <article class="feature">
+          <h3>Revocation</h3>
+          <p>Track revoked certificates in an OpenSSL-style index and regenerate signed CRLs.</p>
+        </article>
+        <article class="feature">
+          <h3>Sync</h3>
+          <p>Compare and deploy <code>ca.crt</code> and <code>crl.pem</code> to local or SSH targets.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="workflow" class="section split">
+      <div>
+        <h2>Designed for small mTLS deployments</h2>
+        <p>
+          Servers trust the CA certificate and check the current CRL. Clients receive a PKCS#12 bundle
+          containing their private key, client certificate, and CA chain.
+        </p>
+      </div>
+      <div class="store-layout">
+        <pre><code>~/.certies/
+  serial
+  crlnumber
+  index.txt
+  ca/
+    ca.key
+    ca.crt
+  crl/
+    crl.pem
+  clients/
+    alice/
+      laptop/
+        laptop.key
+        laptop.crt
+        laptop.p12</code></pre>
+      </div>
+    </section>
+
+    <section id="commands" class="section">
+      <div class="section-heading">
+        <h2>Core commands</h2>
+        <p>A compact command set for the certificate lifecycle.</p>
+      </div>
+      <div class="command-list">
+        <div><code>certies init</code><span>Create a new certificate authority.</span></div>
+        <div><code>certies new alice laptop</code><span>Issue a client certificate and bundle.</span></div>
+        <div><code>certies revoke alice laptop</code><span>Revoke a certificate and update the CRL.</span></div>
+        <div><code>certies renew-crl</code><span>Refresh CRL validity without changing revocations.</span></div>
+        <div><code>certies status</code><span>Inspect CA, CRL, and client certificate health.</span></div>
+        <div><code>certies sync user@example.com</code><span>Deploy or compare server-facing artifacts.</span></div>
+      </div>
+    </section>
+
+    <section id="install" class="section install">
+      <h2>Install from source</h2>
+      <pre><code>cargo install --path .</code></pre>
+      <p>Requires Rust and system OpenSSL headers.</p>
+    </section>
+  </main>
+</body>
+</html>
