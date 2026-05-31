@@ -8,6 +8,7 @@ use crate::store::{IndexEntry, Store};
 
 pub struct CaInfo {
     pub subject: String,
+    pub key_type: String,
     pub not_before: DateTime<Utc>,
     pub not_after: DateTime<Utc>,
 }
@@ -57,6 +58,7 @@ pub fn read_ca_info(store: &Store) -> Result<CaInfo> {
 
     Ok(CaInfo {
         subject,
+        key_type: key_type_from_cert(&cert),
         not_before: ts(cert.validity().not_before.timestamp()),
         not_after: ts(cert.validity().not_after.timestamp()),
     })

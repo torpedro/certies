@@ -1,12 +1,10 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
-
 #[derive(Parser)]
 #[command(name = "certies", about = "SSL certificate manager for user authentication")]
 pub struct Cli {
-    /// Path to certificate store (default: ~/.certies)
+    /// Path to certificate store (default: ~/.certies; accepts [user@]server[:/path])
     #[arg(short, long, global = true)]
-    pub store: Option<PathBuf>,
+    pub store: Option<String>,
 
     #[command(subcommand)]
     pub command: Commands,

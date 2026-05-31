@@ -18,7 +18,7 @@ cargo install --path .
 
 ## Store layout
 
-All data is stored in `~/.certies/` by default. Every command accepts `--store <path>` to use a different location.
+All data is stored in `~/.certies/` by default. Every command accepts `--store <path>` to use a different local or remote location. Remote stores use SSH and can be passed as `[user@]server` or `[user@]server:/path`; if no remote path is supplied, `~/.certies` is used.
 
 ```
 ~/.certies/
@@ -96,6 +96,7 @@ files.
 
 ```sh
 certies sync ./backup-certies-store
+certies --store user@example.com sync ./local-certies-store
 certies sync user@example.com
 certies sync user@example.com:/etc/ssl/client-auth
 ```
@@ -123,4 +124,6 @@ All commands accept `--store <path>` to target a store other than `~/.certies/`:
 ```sh
 certies --store /etc/certies status
 certies --store /etc/certies new bob phone
+certies --store user@example.com status
+certies --store user@example.com:/etc/certies new bob phone
 ```

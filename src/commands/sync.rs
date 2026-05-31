@@ -39,48 +39,52 @@ impl Target {
 
 struct SyncFile {
     label: &'static str,
-    local_path: PathBuf,
-    remote_name: &'static str,
-    local: Vec<u8>,
-    remote: Option<Vec<u8>>,
+    store_name: &'static str,
+    source: Vec<u8>,
+    target: Option<Vec<u8>>,
 }
 
-pub fn run(store: &Store, target: String) -> Result<()> {
-    store.require_initialized()?;
+pub fn run(source: Option<String>, target: String) -> Result<()> {
+    let source = match source {
+        Some(source) => parse_target(&source)?,
+        None => Target::Local(Store::default_path()),
+    };
     let target = parse_target(&target)?;
 
     let mut files = vec![
         SyncFile {
             label: "ca.crt",
-            local_path: store.ca_cert_path(),
-            remote_name: "ca/ca.crt",
-            local: std::fs::read(store.ca_cert_path()).context("cannot read local ca.crt")?,
-            remote: None,
+            store_name: "ca/ca.crt",
+            source: vec![],
+            target: None,
         },
         SyncFile {
             label: "crl.pem",
-            local_path: store.crl_path(),
-            remote_name: "crl/crl.pem",
-            local: std::fs::read(store.crl_path()).context("cannot read local crl.pem")?,
-            remote: None,
+            store_name: "crl/crl.pem",
+            source: vec![],
+            target: None,
         },
     ];
 
+    load_source_files(&source, &mut files)?;
+
+    println!("Source: {}", source.display());
     println!("Target: {}", target.display());
     println!("Comparing ca.crt and crl.pem...");
     println!();
 
     for file in &files {
-        println!("Checking target {}", target.file_display(file.remote_name));
+        println!("Checking source {}", source.file_display(file.store_name));
+        println!("Checking target {}", target.file_display(file.store_name));
     }
     let target_files = read_target_files(&target, &files)?;
     println!();
 
     let mut out_of_sync = false;
     for file in &mut files {
-        file.remote = target_files.get(file.remote_name).cloned().unwrap_or(None);
+        file.target = target_files.get(file.store_name).cloned().unwrap_or(None);
         print_comparison(file);
-        if file.remote.as_ref() != Some(&file.local) {
+        if file.target.as_ref() != Some(&file.source) {
             out_of_sync = true;
             print_diff(file);
         }
@@ -91,12 +95,12 @@ pub fn run(store: &Store, target: String) -> Result<()> {
         return Ok(());
     }
 
-    let can_download = files.iter().all(|file| file.remote.is_some());
+    let can_download = files.iter().all(|file| file.target.is_some());
 
     println!("Options:");
-    println!("  1. Deploy local ca.crt and crl.pem to the target path");
+    println!("  1. Deploy source ca.crt and crl.pem to the target path");
     if can_download {
-        println!("  2. Download target ca.crt and crl.pem into the local store");
+        println!("  2. Download target ca.crt and crl.pem into the source store");
         println!("  3. Leave unchanged");
         print!("Choose [1/2/3]: ");
     } else {
@@ -110,8 +114,8 @@ pub fn run(store: &Store, target: String) -> Result<()> {
 
     if can_download {
         match input.trim() {
-            "1" | "a" | "A" => deploy_local(&target, &files),
-            "2" | "b" | "B" => download_target(&files),
+            "1" | "a" | "A" => deploy_source_to_target(&target, &files),
+            "2" | "b" | "B" => download_target_to_source(&source, &files),
             "3" | "" => {
                 println!("No changes made.");
                 Ok(())
@@ -120,7 +124,7 @@ pub fn run(store: &Store, target: String) -> Result<()> {
         }
     } else {
         match input.trim() {
-            "1" | "a" | "A" => deploy_local(&target, &files),
+            "1" | "a" | "A" => deploy_source_to_target(&target, &files),
             "2" | "" => {
                 println!("No changes made.");
                 Ok(())
@@ -175,6 +179,14 @@ fn home_dir() -> PathBuf {
     std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."))
 }
 
+fn backup_path(path: &Path, stamp: &str) -> PathBuf {
+    path.with_extension(format!(
+        "{}.bak.{}",
+        path.extension().and_then(|ext| ext.to_str()).unwrap_or("pem"),
+        stamp
+    ))
+}
+
 fn read_target_files(target: &Target, files: &[SyncFile]) -> Result<HashMap<String, Option<Vec<u8>>>> {
     match target {
         Target::Local(path) => read_local_files(path, files),
@@ -182,16 +194,28 @@ fn read_target_files(target: &Target, files: &[SyncFile]) -> Result<HashMap<Stri
     }
 }
 
+fn load_source_files(source: &Target, files: &mut [SyncFile]) -> Result<()> {
+    let source_files = read_target_files(source, files)?;
+    for file in files {
+        file.source = source_files
+            .get(file.store_name)
+            .cloned()
+            .flatten()
+            .with_context(|| format!("source {} is missing", source.file_display(file.store_name)))?;
+    }
+    Ok(())
+}
+
 fn read_local_files(root: &Path, files: &[SyncFile]) -> Result<HashMap<String, Option<Vec<u8>>>> {
     let mut result = HashMap::new();
     for file in files {
-        let path = root.join(file.remote_name);
+        let path = root.join(file.store_name);
         let contents = if path.exists() {
             Some(std::fs::read(&path).with_context(|| format!("cannot read {}", path.display()))?)
         } else {
             None
         };
-        result.insert(file.remote_name.to_string(), contents);
+        result.insert(file.store_name.to_string(), contents);
     }
     Ok(result)
 }
@@ -203,8 +227,8 @@ fn read_remote_files(remote: &Remote, files: &[SyncFile]) -> Result<HashMap<Stri
     for file in files {
         command.push_str(&format!(
             " read_one {} {};",
-            shell_quote(file.remote_name),
-            remote_shell_path(&remote_file_path(remote, file.remote_name))
+            shell_quote(file.store_name),
+            remote_shell_path(&remote_file_path(remote, file.store_name))
         ));
     }
 
@@ -222,7 +246,7 @@ fn read_remote_files(remote: &Remote, files: &[SyncFile]) -> Result<HashMap<Stri
     bail!("failed to read remote files: {}", stderr.trim())
 }
 
-fn deploy_local(target: &Target, files: &[SyncFile]) -> Result<()> {
+fn deploy_source_to_target(target: &Target, files: &[SyncFile]) -> Result<()> {
     match target {
         Target::Local(path) => deploy_local_files(path, files),
         Target::Remote(remote) => deploy_remote_files(remote, files),
@@ -235,8 +259,8 @@ fn deploy_local_files(root: &Path, files: &[SyncFile]) -> Result<()> {
     std::fs::create_dir_all(root.join("crl"))
         .with_context(|| format!("cannot create {}", root.join("crl").display()))?;
     for file in files {
-        let path = root.join(file.remote_name);
-        std::fs::write(&path, &file.local)
+        let path = root.join(file.store_name);
+        std::fs::write(&path, &file.source)
             .with_context(|| format!("cannot write {}", path.display()))?;
         println!("Deployed {}", file.label);
     }
@@ -250,12 +274,12 @@ fn deploy_remote_files(remote: &Remote, files: &[SyncFile]) -> Result<()> {
         remote_shell_path(&remote_file_path(remote, "crl"))
     );
     for file in files {
-        let path = remote_file_path(remote, file.remote_name);
+        let path = remote_file_path(remote, file.store_name);
         script.push_str(&format!(
             "base64 --decode > {} <<'CERTIES_{}'\n{}\nCERTIES_{}\n",
             remote_shell_path(&path),
             file.label.replace('.', "_").to_uppercase(),
-            base64::encode_block(&file.local),
+            base64::encode_block(&file.source),
             file.label.replace('.', "_").to_uppercase(),
         ));
     }
@@ -266,7 +290,7 @@ fn deploy_remote_files(remote: &Remote, files: &[SyncFile]) -> Result<()> {
     Ok(())
 }
 
-fn download_target(files: &[SyncFile]) -> Result<()> {
+fn download_target_to_source(source: &Target, files: &[SyncFile]) -> Result<()> {
     let stamp = chrono::Utc::now().format("%Y%m%d%H%M%S").to_string();
     println!("Warning: downloading ca.crt can make the local CA certificate disagree with ca.key.");
     print!("Type \"download\" to continue: ");
@@ -278,25 +302,60 @@ fn download_target(files: &[SyncFile]) -> Result<()> {
         return Ok(());
     }
 
-    for file in files {
-        let remote = file.remote.as_ref().with_context(|| {
-            format!("target {} is missing; cannot download it", file.label)
-        })?;
-        let backup = file.local_path.with_extension(format!(
-            "{}.bak.{}",
-            file.local_path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .unwrap_or("pem"),
-            stamp
-        ));
-        std::fs::copy(&file.local_path, &backup)
-            .with_context(|| format!("cannot back up {}", file.local_path.display()))?;
-        std::fs::write(&file.local_path, remote)
-            .with_context(|| format!("cannot write {}", file.local_path.display()))?;
-        println!("Downloaded {} (backup: {})", file.label, backup.display());
+    let downloaded: Vec<_> = files
+        .iter()
+        .map(|file| {
+            file.target
+                .as_ref()
+                .map(|contents| (file.label, file.store_name, contents.as_slice()))
+                .with_context(|| format!("target {} is missing; cannot download it", file.label))
+        })
+        .collect::<Result<_>>()?;
+
+    write_downloaded_files(source, &downloaded, &stamp)
+}
+
+fn write_downloaded_files(source: &Target, files: &[(&str, &str, &[u8])], stamp: &str) -> Result<()> {
+    match source {
+        Target::Local(root) => {
+            for file in files {
+                let path = root.join(file.1);
+                let backup = backup_path(&path, stamp);
+                if path.exists() {
+                    std::fs::copy(&path, &backup)
+                        .with_context(|| format!("cannot back up {}", path.display()))?;
+                }
+                std::fs::write(&path, file.2)
+                    .with_context(|| format!("cannot write {}", path.display()))?;
+                println!("Downloaded {} (backup: {})", file.0, backup.display());
+            }
+        }
+        Target::Remote(remote) => {
+            let remote_files = files.iter().map(|file| (file.1, file.2)).collect::<Vec<_>>();
+            deploy_bytes_remote(remote, &remote_files)
+                .context("cannot download target files into remote source")?;
+            for file in files {
+                println!("Downloaded {} into remote source", file.0);
+            }
+        }
     }
     Ok(())
+}
+
+fn deploy_bytes_remote(remote: &Remote, files: &[(&str, &[u8])]) -> Result<()> {
+    let mut script = format!(
+        "set -e\nmkdir -p {} {}\n",
+        remote_shell_path(&remote_file_path(remote, "ca")),
+        remote_shell_path(&remote_file_path(remote, "crl"))
+    );
+    for (name, contents) in files {
+        script.push_str(&format!(
+            "base64 --decode > {} <<'CERTIES_FILE'\n{}\nCERTIES_FILE\n",
+            remote_shell_path(&remote_file_path(remote, name)),
+            base64::encode_block(contents),
+        ));
+    }
+    write_remote_command(remote, "sh -s", Some(script.as_bytes()))
 }
 
 fn write_remote_command(remote: &Remote, command: &str, input: Option<&[u8]>) -> Result<()> {
@@ -364,19 +423,19 @@ fn parse_remote_files(output: &[u8]) -> Result<HashMap<String, Option<Vec<u8>>>>
 fn print_comparison(file: &SyncFile) {
     println!("{}", file.label);
     println!(
-        "  local:  {} bytes, sha256 {}",
-        file.local.len(),
-        hex(&sha256(&file.local))
+        "  source: {} bytes, sha256 {}",
+        file.source.len(),
+        hex(&sha256(&file.source))
     );
-    match &file.remote {
-        Some(remote) => println!(
-            "  remote: {} bytes, sha256 {}",
-            remote.len(),
-            hex(&sha256(remote))
+    match &file.target {
+        Some(target) => println!(
+            "  target: {} bytes, sha256 {}",
+            target.len(),
+            hex(&sha256(target))
         ),
-        None => println!("  remote: missing"),
+        None => println!("  target: missing"),
     }
-    if file.remote.as_ref() == Some(&file.local) {
+    if file.target.as_ref() == Some(&file.source) {
         println!("  status: up to date");
     } else {
         println!("  status: out of sync");
@@ -384,15 +443,15 @@ fn print_comparison(file: &SyncFile) {
 }
 
 fn print_diff(file: &SyncFile) {
-    let Some(remote) = &file.remote else {
+    let Some(target) = &file.target else {
         println!();
         return;
     };
 
     println!("  semantic differences:");
     let result = match file.label {
-        "ca.crt" => print_cert_diff(&file.local, remote),
-        "crl.pem" => print_crl_diff(&file.local, remote),
+        "ca.crt" => print_cert_diff(&file.source, target),
+        "crl.pem" => print_crl_diff(&file.source, target),
         _ => Err(anyhow::anyhow!("no semantic diff available for {}", file.label)),
     };
 

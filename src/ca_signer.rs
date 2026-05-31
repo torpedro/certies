@@ -60,13 +60,6 @@ impl CaSigner {
         }
     }
 
-    pub fn key_type(&self) -> String {
-        match self {
-            CaSigner::Ecdsa { .. } => "ECDSA P-256".to_string(),
-            CaSigner::Rsa { ca_pkey, .. } => format!("RSA-{}", ca_pkey.bits()),
-        }
-    }
-
     /// Sign a client certificate. Returns the certificate PEM.
     /// The client key is always generated as ECDSA P-256 by the caller.
     pub fn sign_client_cert(

@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
 
-use crate::ca_signer::CaSigner;
 use crate::cert_reader;
 use crate::store::Store;
 
@@ -14,33 +13,42 @@ fn red(s: &str) -> String {
 }
 
 pub fn run(store: &Store) -> Result<()> {
-    store.require_initialized()?;
+    if !store.ca_cert_path().exists() && !store.crl_path().exists() {
+        store.require_initialized()?;
+    }
 
     let now = Utc::now();
-    let ca = cert_reader::read_ca_info(store)?;
-    let signer = CaSigner::load(store)?;
     let crl = cert_reader::read_crl_info(store)?;
-    let index = store.read_index()?;
+    let index = if store.index_path().exists() {
+        store.read_index()?
+    } else {
+        vec![]
+    };
     let clients = cert_reader::list_clients(store, &index)?;
 
     println!("Store: {}", store.root.display());
     println!();
     println!("Certificate Authority");
-    println!("  Subject:     {}", ca.subject);
-    println!("  Key type:    {}", signer.key_type());
-    println!("  Created:     {}", ca.not_before.format("%Y-%m-%d"));
-    let ca_days_left = (ca.not_after - now).num_days();
-    println!(
-        "  Expires:     {} ({} days)",
-        ca.not_after.format("%Y-%m-%d"),
-        ca_days_left
-    );
-    if ca_days_left < 0 {
-        println!("  Status:      {}", red("EXPIRED"));
-    } else if ca_days_left < 30 {
-        println!("  Status:      {}", red("WARNING — expiring soon"));
+    if store.ca_cert_path().exists() {
+        let ca = cert_reader::read_ca_info(store)?;
+        println!("  Subject:     {}", ca.subject);
+        println!("  Key type:    {}", ca.key_type);
+        println!("  Created:     {}", ca.not_before.format("%Y-%m-%d"));
+        let ca_days_left = (ca.not_after - now).num_days();
+        println!(
+            "  Expires:     {} ({} days)",
+            ca.not_after.format("%Y-%m-%d"),
+            ca_days_left
+        );
+        if ca_days_left < 0 {
+            println!("  Status:      {}", red("EXPIRED"));
+        } else if ca_days_left < 30 {
+            println!("  Status:      {}", red("WARNING — expiring soon"));
+        } else {
+            println!("  Status:      {}", green("valid"));
+        }
     } else {
-        println!("  Status:      {}", green("valid"));
+        println!("  Status:      {}", red("missing ca/ca.crt"));
     }
 
     println!();
@@ -65,7 +73,11 @@ pub fn run(store: &Store) -> Result<()> {
 
     println!();
     if clients.is_empty() {
-        println!("Client certificates: none");
+        if store.index_path().exists() || store.root.join("clients").exists() {
+            println!("Client certificates: none");
+        } else {
+            println!("Client certificates: not available in this deployed store");
+        }
         return Ok(());
     }
 
