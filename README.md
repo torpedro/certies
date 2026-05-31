@@ -2,6 +2,8 @@
 
 A command-line tool for managing SSL client certificates used for user authentication. It maintains a local Certificate Authority, issues and revokes client certificates, and keeps a Certificate Revocation List (CRL) up to date.
 
+Project site: [https://torpedro.github.io/certies/](https://torpedro.github.io/certies/)
+
 ## Building
 
 Requires Rust and system OpenSSL headers (`libssl-dev` on Debian/Ubuntu, `openssl-devel` on Fedora).
