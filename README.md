@@ -86,6 +86,20 @@ certies renew-crl
 certies renew-crl --validity-days 90
 ```
 
+### `sync`
+
+Compares local `ca/ca.crt` and `crl/crl.pem` with `ca/ca.crt` and `crl/crl.pem`
+in another local store directory or in a remote server directory over SSH. If no
+remote path is supplied, `~/.certies` is used. If the files differ, it shows the
+differences and prompts to either deploy the local files or download the target
+files.
+
+```sh
+certies sync ./backup-certies-store
+certies sync user@example.com
+certies sync user@example.com:/etc/ssl/client-auth
+```
+
 ### `status`
 
 Prints a summary of the CA, CRL, and all client certificates — including validity dates and revocation status. Valid entries are shown in green, problematic ones in red.

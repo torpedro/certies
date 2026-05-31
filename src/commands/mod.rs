@@ -5,3 +5,4 @@ pub mod renew_crl;
 pub mod reset;
 pub mod revoke;
 pub mod status;
+pub mod sync;

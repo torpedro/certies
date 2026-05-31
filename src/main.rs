@@ -25,6 +25,7 @@ fn main() -> Result<()> {
         Commands::Revoke { client, device } => commands::revoke::run(&store, client, device),
         Commands::Status => commands::status::run(&store),
         Commands::RenewCrl { validity_days } => commands::renew_crl::run(&store, validity_days),
+        Commands::Sync { target } => commands::sync::run(&store, target),
         Commands::Migrate => commands::migrate::run(&store),
         Commands::Reset => commands::reset::run(&store),
     }

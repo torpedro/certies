@@ -65,6 +65,12 @@ pub enum Commands {
         validity_days: Option<u32>,
     },
 
+    /// Compare and synchronise ca.crt and crl.pem with a local or remote store path
+    Sync {
+        /// Local directory or remote target in the form [user@]server[:/path]
+        target: String,
+    },
+
     /// Migrate a legacy store.json store to serial, crlnumber, and index.txt
     Migrate,
 
