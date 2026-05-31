@@ -65,6 +65,9 @@ pub enum Commands {
         validity_days: Option<u32>,
     },
 
+    /// Migrate a legacy store.json store to serial, crlnumber, and index.txt
+    Migrate,
+
     /// Delete all certificates and reset the store
     Reset,
 }

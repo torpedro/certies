@@ -4,7 +4,7 @@ use std::path::Path;
 use x509_parser::pem::parse_x509_pem;
 use x509_parser::prelude::*;
 
-use crate::store::Store;
+use crate::store::{IndexEntry, Store};
 
 pub struct CaInfo {
     pub subject: String,
@@ -12,15 +12,21 @@ pub struct CaInfo {
     pub not_after: DateTime<Utc>,
 }
 
+pub struct CrlInfo {
+    pub last_update: DateTime<Utc>,
+    pub next_update: Option<DateTime<Utc>>,
+    pub number: Option<u64>,
+    pub entries: Vec<CrlEntry>,
+}
+
 pub struct CrlEntry {
     pub serial: u64,
     pub revoked_at: DateTime<Utc>,
 }
 
-pub struct CrlInfo {
-    pub last_update: DateTime<Utc>,
-    pub next_update: Option<DateTime<Utc>>,
-    pub entries: Vec<CrlEntry>,
+pub struct CertIndexInfo {
+    pub serial: u64,
+    pub not_after: DateTime<Utc>,
 }
 
 pub struct ClientInfo {
@@ -79,21 +85,29 @@ pub fn read_crl_info(store: &Store) -> Result<Option<CrlInfo>> {
     Ok(Some(CrlInfo {
         last_update: ts(crl.last_update().timestamp()),
         next_update: crl.next_update().map(|t| ts(t.timestamp())),
+        number: crl.crl_number().and_then(|n| n.to_u64_digits().last().copied()),
         entries,
     }))
 }
 
 pub fn read_client_serial(cert_path: &Path) -> Result<u64> {
+    Ok(read_cert_index_info(cert_path)?.serial)
+}
+
+pub fn read_cert_index_info(cert_path: &Path) -> Result<CertIndexInfo> {
     let pem_str = std::fs::read_to_string(cert_path)
         .with_context(|| format!("cannot read {}", cert_path.display()))?;
     let (_, pem) = parse_x509_pem(pem_str.as_bytes())
         .map_err(|e| anyhow::anyhow!("failed to parse cert PEM: {e:?}"))?;
     let (_, cert) = X509Certificate::from_der(&pem.contents)
         .map_err(|e| anyhow::anyhow!("failed to parse cert DER: {e:?}"))?;
-    Ok(bytes_to_serial(cert.raw_serial()))
+    Ok(CertIndexInfo {
+        serial: bytes_to_serial(cert.raw_serial()),
+        not_after: ts(cert.validity().not_after.timestamp()),
+    })
 }
 
-pub fn list_clients(store: &Store, crl: Option<&CrlInfo>) -> Result<Vec<ClientInfo>> {
+pub fn list_clients(store: &Store, index: &[IndexEntry]) -> Result<Vec<ClientInfo>> {
     let clients_dir = store.root.join("clients");
     if !clients_dir.exists() {
         return Ok(vec![]);
@@ -123,7 +137,7 @@ pub fn list_clients(store: &Store, crl: Option<&CrlInfo>) -> Result<Vec<ClientIn
                 continue;
             }
 
-            let info = read_cert_info(&cert_path, &client_name, &device_name, crl)?;
+            let info = read_cert_info(&cert_path, &client_name, &device_name, index)?;
             result.push(info);
         }
     }
@@ -135,7 +149,7 @@ fn read_cert_info(
     cert_path: &Path,
     client: &str,
     device: &str,
-    crl: Option<&CrlInfo>,
+    index: &[IndexEntry],
 ) -> Result<ClientInfo> {
     let pem_str = std::fs::read_to_string(cert_path)
         .with_context(|| format!("cannot read {}", cert_path.display()))?;
@@ -145,7 +159,9 @@ fn read_cert_info(
         .map_err(|e| anyhow::anyhow!("failed to parse DER: {e:?}"))?;
 
     let serial = bytes_to_serial(cert.raw_serial());
-    let revocation = crl.and_then(|c| c.entries.iter().find(|e| e.serial == serial));
+    let revocation = index
+        .iter()
+        .find(|entry| entry.serial == serial && entry.status == 'R');
     let key_type = key_type_from_cert(&cert);
 
     Ok(ClientInfo {
@@ -156,7 +172,7 @@ fn read_cert_info(
         not_before: ts(cert.validity().not_before.timestamp()),
         not_after: ts(cert.validity().not_after.timestamp()),
         revoked: revocation.is_some(),
-        revoked_at: revocation.map(|e| e.revoked_at),
+        revoked_at: revocation.and_then(|e| e.revoked_at),
     })
 }
 

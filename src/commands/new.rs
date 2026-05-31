@@ -20,7 +20,6 @@ pub fn run(
     p12_password: Option<String>,
 ) -> Result<()> {
     store.require_initialized()?;
-    let mut meta = store.load_meta()?;
 
     let client_dir = store.client_dir(&client, &device);
     if client_dir.exists() {
@@ -30,7 +29,7 @@ pub fn run(
         .with_context(|| format!("cannot create {}", client_dir.display()))?;
 
     let signer = CaSigner::load(store)?;
-    let serial = meta.next_serial;
+    let serial = store.take_next_serial()?;
 
     let client_key_pair = KeyPair::generate()?;
     let key_pem = client_key_pair.serialize_pem();
@@ -79,14 +78,12 @@ pub fn run(
         .with_context(|| format!("cannot write {}", cert_path.display()))?;
     write_private_bytes(&p12_path, &p12_der)?;
 
-    meta.next_serial += 1;
-    store.save_meta(&meta)?;
-
     let expires = chrono::DateTime::from_timestamp(
         (time::OffsetDateTime::now_utc() + Duration::days(validity_days as i64)).unix_timestamp(),
         0,
     )
     .unwrap();
+    store.record_issued(&client, &device, serial, expires)?;
 
     println!("Certificate issued for {client}/{device}");
     println!("  Certificate: {}", cert_path.display());

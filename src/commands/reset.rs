@@ -12,7 +12,10 @@ pub fn run(store: &Store) -> Result<()> {
     println!("  ca/       — CA key and certificate");
     println!("  crl/      — Certificate Revocation List");
     println!("  clients/  — all client keys and certificates");
-    println!("  store.json");
+    println!("  serial");
+    println!("  crlnumber");
+    println!("  index.txt");
+    println!("  store.json.legacy");
     println!();
     print!("Type \"yes\" to confirm: ");
     io::stdout().flush()?;
@@ -25,7 +28,15 @@ pub fn run(store: &Store) -> Result<()> {
         return Ok(());
     }
 
-    for entry in ["ca", "crl", "clients", "store.json"] {
+    for entry in [
+        "ca",
+        "crl",
+        "clients",
+        "serial",
+        "crlnumber",
+        "index.txt",
+        "store.json.legacy",
+    ] {
         let path = store.root.join(entry);
         if path.is_dir() {
             std::fs::remove_dir_all(&path)

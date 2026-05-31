@@ -5,12 +5,12 @@ use std::io::{self, Write};
 use time::Duration;
 
 use crate::commands::renew_crl;
-use crate::store::{Store, StoreMeta};
+use crate::store::Store;
 
 const DEFAULT_VALIDITY_DAYS: u32 = 3650;
 
 pub fn run(store: &Store, name: Option<String>, validity_days: Option<u32>) -> Result<()> {
-    if store.is_initialized() {
+    if store.has_any_database() {
         bail!("Store at {} is already initialised.", store.root.display());
     }
 
@@ -54,7 +54,7 @@ pub fn run(store: &Store, name: Option<String>, validity_days: Option<u32>) -> R
     fs::write(&cert_path, cert.pem())
         .with_context(|| format!("cannot write {}", cert_path.display()))?;
 
-    store.save_meta(&StoreMeta { next_serial: 1 })?;
+    store.init_database(2, 1)?;
 
     let expires = chrono::DateTime::from_timestamp(
         (now + Duration::days(validity_days as i64)).unix_timestamp(),

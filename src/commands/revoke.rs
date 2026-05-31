@@ -15,16 +15,19 @@ pub fn run(store: &Store, client: String, device: String) -> Result<()> {
     let serial = cert_reader::read_client_serial(&cert_path)
         .with_context(|| format!("cannot read serial from {}", cert_path.display()))?;
 
-    if let Some(crl) = cert_reader::read_crl_info(store)? {
-        if crl.entries.iter().any(|e| e.serial == serial) {
-            bail!("Certificate #{serial} for {client}/{device} is already revoked.");
-        }
+    if store
+        .revoked_entries()?
+        .iter()
+        .any(|entry| entry.serial == serial)
+    {
+        bail!("Certificate #{serial} for {client}/{device} is already revoked.");
     }
 
     println!("Revoked certificate #{serial} for {client}/{device}.");
     println!("Regenerating CRL...");
 
-    renew_crl::run_with_extra(store, 30, Some((serial, chrono::Utc::now())))?;
+    store.mark_revoked(serial, chrono::Utc::now())?;
+    renew_crl::run_with_extra(store, 30)?;
 
     Ok(())
 }

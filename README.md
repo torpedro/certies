@@ -22,7 +22,9 @@ All data is stored in `~/.certies/` by default. Every command accepts `--store <
 
 ```
 ~/.certies/
-  store.json                          # tracks next serial number
+  serial                              # next certificate serial number (hex)
+  crlnumber                           # next CRL number (hex)
+  index.txt                           # OpenSSL-style issued/revoked certificate database
   ca/
     ca.key                            # CA private key (mode 0600)
     ca.crt                            # CA certificate (PEM)

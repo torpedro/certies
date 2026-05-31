@@ -20,7 +20,8 @@ pub fn run(store: &Store) -> Result<()> {
     let ca = cert_reader::read_ca_info(store)?;
     let signer = CaSigner::load(store)?;
     let crl = cert_reader::read_crl_info(store)?;
-    let clients = cert_reader::list_clients(store, crl.as_ref())?;
+    let index = store.read_index()?;
+    let clients = cert_reader::list_clients(store, &index)?;
 
     println!("Store: {}", store.root.display());
     println!();
