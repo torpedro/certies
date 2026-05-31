@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SSL certificate concepts | certies</title>
+  <meta name="description" content="How certies CA certificates, client certificates, private keys, PKCS#12 bundles, and CRLs fit together.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Primary">
+      <a class="brand" href="index.html">certies</a>
+      <div class="nav-links">
+        <a href="index.html#features">Features</a>
+        <a href="index.html#commands">Commands</a>
+        <a href="ssl.html">SSL concepts</a>
+        <a href="tls-handshake.html">TLS handshake</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="article-shell">
+    <article class="article">
+      <p class="eyebrow">Documentation</p>
+      <h1>SSL certificate concepts</h1>
+      <p class="lead">What each file in the certies store does, how the pieces fit together, and how a server uses them to authenticate clients.</p>
+
+      <h2>The chain of trust</h2>
+      <p>Every certificate in this system is either a CA certificate or signed by the CA. The CA signature is what makes a client certificate trustworthy: a server that holds the CA certificate can verify that a client certificate was issued by the same authority.</p>
+      <pre><code>CA certificate (self-signed)
+  |-- client certificate (alice/laptop)
+  |-- client certificate (alice/phone)
+  `-- client certificate (bob/desktop)</code></pre>
+
+      <h2>Files</h2>
+
+      <h3><code>ca/ca.key</code> — CA private key</h3>
+      <p>The CA private key signs every client certificate issued by the store. It is the most sensitive file: anyone who obtains it can issue certificates that your server will trust. It is stored with mode <code>0600</code> and should never leave the machine running certies.</p>
+
+      <h3><code>ca/ca.crt</code> — CA certificate</h3>
+      <p>The CA certificate contains the CA public key and identity. This file is not secret and needs to be deployed to every server that will authenticate clients. It is what the server uses to verify that a presented client certificate was signed by your CA.</p>
+      <p>The CA certificate has a long validity period and must be replaced along with all client certificates if it expires or is compromised.</p>
+
+      <h3><code>clients/&lt;client&gt;/&lt;device&gt;/&lt;device&gt;.key</code> — client private key</h3>
+      <p>The client private key stays on the client device. During the TLS handshake, it proves that the client holds the private key corresponding to the public key in its certificate. If a key password was set at issuance, the file is encrypted with AES-256-CBC.</p>
+
+      <h3><code>clients/&lt;client&gt;/&lt;device&gt;/&lt;device&gt;.crt</code> — client certificate</h3>
+      <p>The client certificate is signed by the CA and contains the client public key, identity, validity window, serial number, usage extensions, and the CA signature over those fields.</p>
+      <p>During a TLS handshake, the client presents this certificate to the server. The server checks the CA signature, verifies the serial is not in the CRL, and checks that the certificate has not expired.</p>
+
+      <h3><code>clients/&lt;client&gt;/&lt;device&gt;/&lt;device&gt;.p12</code> — PKCS#12 bundle</h3>
+      <p>The PKCS#12 bundle packages the client private key, client certificate, and CA certificate chain into one encrypted file. This is the file commonly imported into operating systems, browsers, VPN clients, and other software that supports client certificates.</p>
+
+      <h3><code>crl/crl.pem</code> — Certificate Revocation List</h3>
+      <p>The CRL is a signed list of certificate serial numbers revoked before their expiry date. Servers that check the CRL reject any client certificate whose serial appears in it, even if the certificate itself is still within its validity window.</p>
+      <p>The CRL has its own validity window and must be regenerated or redeployed before it expires. certies regenerates it automatically whenever a certificate is revoked.</p>
+
+      <h2>How client authentication works</h2>
+      <ol>
+        <li>The server is configured with <code>ca.crt</code> as its trusted CA and <code>crl.pem</code> as its revocation list.</li>
+        <li>The client is provisioned with its <code>.p12</code> bundle, or with separate <code>.key</code> and <code>.crt</code> files.</li>
+        <li>The client presents its certificate during the TLS handshake.</li>
+        <li>The server verifies the CA signature, expiry date, revocation status, and client-auth usage.</li>
+        <li>The client proves ownership of the corresponding private key by signing handshake data.</li>
+      </ol>
+      <p>If all checks pass, the server knows the client was explicitly issued a certificate by this CA and has not been revoked.</p>
+
+      <h2>Revoking access</h2>
+      <p>Deleting a certificate file does not revoke it. The client may still hold a copy, and the server has no way to know the file was deleted. To cut off access, run:</p>
+      <pre><code>certies revoke &lt;client&gt; &lt;device&gt;</code></pre>
+      <p>This adds the certificate serial to the revocation database and regenerates <code>crl.pem</code>. Deploy the updated CRL to the server so it rejects the revoked certificate on the next connection attempt.</p>
+    </article>
+  </main>
+</body>
+</html>

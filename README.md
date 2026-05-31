@@ -16,6 +16,11 @@ The binary is placed at `target/release/certies`. To install it to `~/.cargo/bin
 cargo install --path .
 ```
 
+## Documentation
+
+- [SSL certificate concepts](docs/ssl.html)
+- [TLS client authentication handshake](docs/tls-handshake.html)
+
 ## Store layout
 
 All data is stored in `~/.certies/` by default. Every command accepts `--store <path>` to use a different local or remote location. Remote stores use SSH and can be passed as `[user@]server` or `[user@]server:/path`; if no remote path is supplied, `~/.certies` is used.

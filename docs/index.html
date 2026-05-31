@@ -15,6 +15,8 @@
         <a href="#features">Features</a>
         <a href="#workflow">Workflow</a>
         <a href="#commands">Commands</a>
+        <a href="ssl.html">SSL concepts</a>
+        <a href="tls-handshake.html">TLS handshake</a>
       </div>
     </nav>
   </header>
@@ -108,6 +110,23 @@ $ certies sync user@example.com</code></pre>
         <div><code>certies renew-crl</code><span>Refresh CRL validity without changing revocations.</span></div>
         <div><code>certies status</code><span>Inspect CA, CRL, and client certificate health.</span></div>
         <div><code>certies sync user@example.com</code><span>Deploy or compare server-facing artifacts.</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-heading">
+        <h2>Documentation</h2>
+        <p>Background material for using certies in a mutual TLS deployment.</p>
+      </div>
+      <div class="feature-grid docs-grid">
+        <article class="feature">
+          <h3><a href="ssl.html">SSL certificate concepts</a></h3>
+          <p>What each file in the store does and how servers use CA certificates, client certs, and CRLs.</p>
+        </article>
+        <article class="feature">
+          <h3><a href="tls-handshake.html">TLS handshake details</a></h3>
+          <p>A deeper explanation of certificate signing, verification, ECDSA math, and mTLS handshakes.</p>
+        </article>
       </div>
     </section>
 

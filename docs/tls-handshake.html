@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TLS client authentication handshake | certies</title>
+  <meta name="description" content="How certificate signing, verification, ECDSA math, CertificateVerify, ECDHE, and CRLs work in mutual TLS.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Primary">
+      <a class="brand" href="index.html">certies</a>
+      <div class="nav-links">
+        <a href="index.html#features">Features</a>
+        <a href="index.html#commands">Commands</a>
+        <a href="ssl.html">SSL concepts</a>
+        <a href="tls-handshake.html">TLS handshake</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="article-shell">
+    <article class="article">
+      <p class="eyebrow">Documentation</p>
+      <h1>TLS client authentication handshake</h1>
+      <p class="lead">How certificates managed by certies are used during a TLS handshake, including the cryptographic signing and verification checks.</p>
+
+      <h2>The pieces</h2>
+      <p>certies creates a CA private key and certificate, a client private key, and a client certificate containing the client public key signed by the CA. The CA private key signs certificates. The client private key proves possession during a TLS connection.</p>
+
+      <h2>Public key signatures</h2>
+      <p>A digital signature scheme has three core operations:</p>
+      <pre><code>(public_key, private_key) = KeyGen()
+signature = Sign(private_key, message)
+valid = Verify(public_key, message, signature)</code></pre>
+      <p>The private key creates signatures. The public key verifies them. Verification does not reveal the private key and cannot create new signatures.</p>
+
+      <h2>Certificate signing</h2>
+      <p>A certificate is a signed statement. For a client certificate, the statement includes the subject, public key, serial, validity window, usage, and issuer.</p>
+      <pre><code>subject: CN=alice/laptop
+public key: client_public_key
+serial: 02
+validity: not_before..not_after
+usage: client authentication
+issuer: certies CA</code></pre>
+      <p>The CA signs the certificate's TBSCertificate, meaning "to be signed certificate":</p>
+      <pre><code>digest = SHA256(TBSCertificate)
+signature = Sign(ca_private_key, digest)</code></pre>
+      <p>The server receives the certificate and verifies it with the CA public key from <code>ca.crt</code>:</p>
+      <pre><code>digest = SHA256(TBSCertificate)
+Verify(ca_public_key, digest, signature)</code></pre>
+      <p>If verification succeeds, the server knows the CA signed the certificate contents, including the client's public key, subject, serial, dates, and usage extensions.</p>
+
+      <h2>RSA signatures, briefly</h2>
+      <p>For RSA signing, the private key contains a private exponent <code>d</code> and modulus <code>n</code>. The public key contains exponent <code>e</code> and the same modulus <code>n</code>.</p>
+      <pre><code>s = m^d mod n
+m = s^e mod n</code></pre>
+      <p>Real TLS certificates do not sign raw messages this way. They sign a structured hash encoding, commonly using RSA-PSS or PKCS#1 v1.5 depending on the certificate signature algorithm. The key relationship is that only the private exponent can produce a signature that verifies with the public exponent.</p>
+      <p>An RSA CA can sign a client certificate containing an ECDSA public key. The CA signature algorithm and the client key algorithm are separate.</p>
+
+      <h2>ECDSA signatures, briefly</h2>
+      <p>ECDSA uses elliptic curve group arithmetic. For P-256, there is a standard generator point <code>G</code> of large prime order <code>n</code>.</p>
+      <pre><code>d where 1 &lt;= d &lt; n
+Q = dG</code></pre>
+      <p>The private key is the integer <code>d</code>. The public key is the curve point <code>Q</code>. Computing <code>Q</code> from <code>d</code> is easy; recovering <code>d</code> from <code>Q</code> is intended to be infeasible.</p>
+      <p>To sign a message hash <code>z</code>, ECDSA chooses a fresh secret nonce <code>k</code> and computes:</p>
+      <pre><code>R = kG
+r = R.x mod n
+s = k^-1 * (z + r*d) mod n
+signature = (r, s)</code></pre>
+      <p>Verification uses only the public key:</p>
+      <pre><code>w = s^-1 mod n
+u1 = z*w mod n
+u2 = r*w mod n
+X = u1*G + u2*Q
+valid if X.x mod n == r</code></pre>
+      <p>Substituting <code>Q = dG</code> shows why this works:</p>
+      <pre><code>X = (z/s)G + (r/s)dG
+X = ((z + r*d)/s)G
+s = k^-1 * (z + r*d)
+(z + r*d)/s = k
+X = kG = R</code></pre>
+      <p>The nonce <code>k</code> must never be reused with the same private key. Reusing it across two signatures can reveal the private key.</p>
+
+      <h2>Server certificate authentication</h2>
+      <p>Most TLS handshakes authenticate the server first. The client verifies the server chain, hostname, validity period, key usage, and revocation status if configured. This prevents the client from sending secrets to an unauthenticated server.</p>
+
+      <h2>Client certificate authentication</h2>
+      <p>With mutual TLS, the server also asks the client for a certificate. The server verifies that the client certificate was signed by a trusted CA, is within its validity period, has <code>clientAuth</code> extended key usage, is not revoked, and maps to an allowed identity.</p>
+      <p>The CA signature proves the certificate was issued by the CA. It does not prove the connecting client has the private key. That proof comes from the TLS CertificateVerify message.</p>
+
+      <h2>CertificateVerify</h2>
+      <p>During the handshake, both sides build a transcript of handshake messages:</p>
+      <pre><code>transcript_hash = Hash(ClientHello || ServerHello || ... || Certificate)</code></pre>
+      <p>For client authentication, the client signs a context-specific value derived from that transcript hash:</p>
+      <pre><code>signature = Sign(client_private_key, context || transcript_hash)</code></pre>
+      <p>The server verifies the signature with the client public key from the client certificate:</p>
+      <pre><code>Verify(client_public_key, context || transcript_hash, signature)</code></pre>
+      <p>If verification succeeds, the server knows the peer has the private key corresponding to the public key in the CA-signed certificate.</p>
+
+      <h2>Why the transcript is signed</h2>
+      <p>The client signs the handshake transcript, not just a random challenge. This binds the proof to this exact connection, including random values, protocol negotiation, cipher suite negotiation, key exchange messages, and certificates sent so far.</p>
+
+      <h2>Key exchange and traffic keys</h2>
+      <p>Certificate signatures authenticate identities. They do not directly encrypt application data. Modern TLS uses ephemeral Diffie-Hellman key exchange, usually ECDHE:</p>
+      <pre><code>client_private = a
+client_public = aG
+
+server_private = b
+server_public = bG
+
+client computes: a(server_public) = a(bG) = abG
+server computes: b(client_public) = b(aG) = abG</code></pre>
+      <p>An observer sees <code>aG</code> and <code>bG</code>, but cannot feasibly compute <code>abG</code>. TLS feeds the shared secret into a key derivation function:</p>
+      <pre><code>traffic_keys = KDF(shared_secret, transcript_hash, labels)</code></pre>
+      <p>Those traffic keys protect application data with symmetric encryption such as AES-GCM or ChaCha20-Poly1305.</p>
+
+      <h2>Finished messages</h2>
+      <p>After certificate verification and key exchange, each side sends a Finished message. This is a MAC over the handshake transcript using keys derived from the handshake secret:</p>
+      <pre><code>finished_key = KDF(handshake_secret, "finished")
+verify_data = HMAC(finished_key, transcript_hash)</code></pre>
+      <p>If either side has a different transcript or derived a different secret, Finished verification fails.</p>
+
+      <h2>Where revocation fits</h2>
+      <p>Revocation is a policy check. The CRL is itself signed by the CA:</p>
+      <pre><code>crl_signature = Sign(ca_private_key, CRL_data)</code></pre>
+      <p>The server verifies the CRL signature, checks that the CRL is currently valid, and checks whether the client certificate serial appears in the revoked list. In certies, <code>index.txt</code> is the durable revocation database and <code>crl.pem</code> is the signed artifact generated for servers.</p>
+
+      <h2>Summary</h2>
+      <p>Mutual TLS combines CA signature checks, certificate validity checks, CRL policy checks, CertificateVerify private-key proof, Diffie-Hellman key exchange, and Finished-message transcript verification. Together, these checks let a server authenticate a client as the holder of a specific CA-issued certificate.</p>
+    </article>
+  </main>
+</body>
+</html>
