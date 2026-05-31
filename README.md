@@ -18,8 +18,8 @@ cargo install --path .
 
 ## Documentation
 
-- [SSL certificate concepts](docs/ssl.html)
-- [TLS client authentication handshake](docs/tls-handshake.html)
+- [SSL certificate concepts](https://torpedro.github.io/certies/ssl.html)
+- [TLS client authentication handshake](https://torpedro.github.io/certies/tls-handshake.html)
 
 ## Store layout
 
