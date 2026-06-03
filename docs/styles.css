@@ -170,6 +170,10 @@ h3 {
   background: #6b7d70;
 }
 
+.terminal .term-green  { color: #4ade80; }
+.terminal .term-red    { color: #f87171; }
+.terminal .term-prompt { color: #6b8f74; }
+
 pre {
   margin: 0;
   padding: 22px;

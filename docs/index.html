@@ -46,6 +46,44 @@ $ certies sync user@example.com</code></pre>
       </div>
     </section>
 
+    <section class="section">
+      <div class="section-heading">
+        <h2>See what's in your store</h2>
+        <p>
+          <code>certies status</code> gives a full snapshot of your CA, CRL, and every
+          client certificate — validity windows, key types, and revocation dates — all in one view.
+        </p>
+      </div>
+      <div class="terminal" aria-label="Example certies status output">
+        <div class="terminal-bar">
+          <span></span><span></span><span></span>
+        </div>
+        <pre><code><span class="term-prompt">$</span> certies status
+Store: ~/.certies
+
+Certificate Authority
+  Subject:     Team Client CA
+  Key type:    ECDSA P-256
+  Created:     2024-01-15
+  Expires:     2034-01-12 (2780 days)
+  Status:      <span class="term-green">valid</span>
+
+CRL
+  Last renewed: 2026-05-28
+  Next update:  2026-06-27 (24 days)
+  Status:       <span class="term-green">valid</span>
+
+Client certificates (4 total, 1 revoked):
+
+  Client               Device               Serial   Key      Created      Expires      Status
+  -----------------------------------------------------------------------------------------------
+  alice                laptop               #1       ECDSA    2025-03-10   2027-03-10   <span class="term-green">valid (280d left)</span>
+  alice                phone                #2       ECDSA    2025-09-01   2026-09-01   <span class="term-green">valid (90d left)</span>
+  bob                  workstation          #3       ECDSA    2025-12-01   2026-12-01   <span class="term-green">valid (181d left)</span>
+  carol                laptop               #4       ECDSA    2024-11-05   2025-11-05   <span class="term-red">REVOKED (2025-04-08)</span></code></pre>
+      </div>
+    </section>
+
     <section id="features" class="section">
       <div class="section-heading">
         <h2>What it manages</h2>
