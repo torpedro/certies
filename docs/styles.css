@@ -73,11 +73,19 @@ pre {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
   gap: 48px;
-  align-items: center;
+  align-items: start;
   max-width: 1120px;
   min-height: calc(100vh - 70px);
   margin: 0 auto;
   padding: 72px 24px;
+}
+
+.hero-commands {
+  align-self: center;
+}
+
+.hero-status {
+  grid-column: 1 / 3;
 }
 
 .eyebrow {

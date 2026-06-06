@@ -27,7 +27,7 @@
         <p class="eyebrow">Mutual TLS certificate management</p>
         <h1>certies</h1>
         <p class="lead">
-          A small Rust CLI for managing a local certificate authority for mutual TLS client authentication.
+          A small CLI for managing a local certificate authority for mutual TLS client authentication.
           Issue, revoke, sync, and inspect client certificates with an OpenSSL-style store layout.
         </p>
         <div class="actions">
@@ -35,26 +35,16 @@
           <a class="button secondary" href="https://github.com/torpedro/certies">View on GitHub</a>
         </div>
       </div>
-      <div class="terminal" aria-label="Example certies commands">
+      <div class="terminal hero-commands" aria-label="Example certies commands">
         <div class="terminal-bar">
           <span></span><span></span><span></span>
         </div>
-        <pre><code>$ certies init --name "Team Client CA"
-$ certies new alice laptop
-$ certies revoke alice laptop
-$ certies sync user@example.com</code></pre>
+        <pre><code><span class="term-prompt">$</span> certies init --name "Team Client CA"
+<span class="term-prompt">$</span> certies new alice laptop
+<span class="term-prompt">$</span> certies revoke alice laptop
+<span class="term-prompt">$</span> certies sync user@example.com</code></pre>
       </div>
-    </section>
-
-    <section class="section">
-      <div class="section-heading">
-        <h2>See what's in your store</h2>
-        <p>
-          <code>certies status</code> gives a full snapshot of your CA, CRL, and every
-          client certificate — validity windows, key types, and revocation dates — all in one view.
-        </p>
-      </div>
-      <div class="terminal" aria-label="Example certies status output">
+      <div class="terminal hero-status" aria-label="Example certies status output">
         <div class="terminal-bar">
           <span></span><span></span><span></span>
         </div>
