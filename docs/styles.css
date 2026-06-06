@@ -340,7 +340,17 @@ pre {
 
   .hero {
     min-height: auto;
-    padding-top: 54px;
+    gap: 24px;
+    padding-top: 48px;
+    padding-bottom: 48px;
+  }
+
+  .hero-status {
+    grid-column: auto;
+  }
+
+  .section {
+    padding: 48px 20px;
   }
 
   .feature-grid {
@@ -368,6 +378,19 @@ pre {
   }
 
   h1 {
-    font-size: 54px;
+    font-size: 48px;
+  }
+
+  h2 {
+    font-size: 26px;
+  }
+
+  .lead {
+    font-size: 17px;
+  }
+
+  pre {
+    font-size: 12px;
+    padding: 16px;
   }
 }
