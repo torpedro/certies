@@ -6,7 +6,7 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::{Id, PKey, Private};
 use openssl::x509::extension::{BasicConstraints, ExtendedKeyUsage, KeyUsage};
 use openssl::x509::{X509Builder, X509NameBuilder, X509};
-use rcgen::{CertificateParams, KeyPair};
+use rcgen::{Issuer, KeyPair};
 
 use crate::store::Store;
 
@@ -20,8 +20,7 @@ pub struct CrlEntry {
 #[allow(clippy::large_enum_variant)]
 pub enum CaSigner {
     Ecdsa {
-        ca_cert: rcgen::Certificate,
-        ca_key_pair: KeyPair,
+        ca_issuer: Issuer<'static, KeyPair>,
         ca_cert_pem: String,
     },
     Rsa {
@@ -52,12 +51,10 @@ impl CaSigner {
             _ => {
                 let ca_key_pair =
                     KeyPair::from_pem(&ca_key_pem).context("cannot load CA key into rcgen")?;
-                let ca_params = CertificateParams::from_ca_cert_pem(&ca_cert_pem)
+                let ca_issuer = Issuer::from_ca_cert_pem(&ca_cert_pem, ca_key_pair)
                     .context("cannot load CA cert into rcgen")?;
-                let ca_cert = ca_params.self_signed(&ca_key_pair)?;
                 Ok(CaSigner::Ecdsa {
-                    ca_cert,
-                    ca_key_pair,
+                    ca_issuer,
                     ca_cert_pem,
                 })
             }
@@ -81,18 +78,9 @@ impl CaSigner {
         validity_days: u32,
     ) -> Result<String> {
         match self {
-            CaSigner::Ecdsa {
-                ca_cert,
-                ca_key_pair,
-                ..
-            } => ecdsa_sign_client_cert(
-                ca_cert,
-                ca_key_pair,
-                cn,
-                client_key_pem,
-                serial,
-                validity_days,
-            ),
+            CaSigner::Ecdsa { ca_issuer, .. } => {
+                ecdsa_sign_client_cert(ca_issuer, cn, client_key_pem, serial, validity_days)
+            }
             CaSigner::Rsa {
                 ca_pkey, ca_x509, ..
             } => rsa_sign_client_cert(ca_pkey, ca_x509, cn, client_key_pem, serial, validity_days),
@@ -107,11 +95,9 @@ impl CaSigner {
         crl_number: u64,
     ) -> Result<String> {
         match self {
-            CaSigner::Ecdsa {
-                ca_cert,
-                ca_key_pair,
-                ..
-            } => ecdsa_sign_crl(ca_cert, ca_key_pair, entries, validity_days, crl_number),
+            CaSigner::Ecdsa { ca_issuer, .. } => {
+                ecdsa_sign_crl(ca_issuer, entries, validity_days, crl_number)
+            }
             CaSigner::Rsa {
                 ca_pkey, ca_x509, ..
             } => rsa_sign_crl(ca_pkey, ca_x509, entries, validity_days, crl_number),
@@ -122,8 +108,7 @@ impl CaSigner {
 // ── ECDSA path (rcgen) ────────────────────────────────────────────────────────
 
 fn ecdsa_sign_client_cert(
-    ca_cert: &rcgen::Certificate,
-    ca_key_pair: &KeyPair,
+    ca_issuer: &Issuer<'_, KeyPair>,
     cn: &str,
     client_key_pem: &str,
     serial: u64,
@@ -147,13 +132,12 @@ fn ecdsa_sign_client_cert(
     params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
     params.serial_number = Some(SerialNumber::from(serial));
 
-    let cert = params.signed_by(&client_key_pair, ca_cert, ca_key_pair)?;
+    let cert = params.signed_by(&client_key_pair, ca_issuer)?;
     Ok(cert.pem())
 }
 
 fn ecdsa_sign_crl(
-    ca_cert: &rcgen::Certificate,
-    ca_key_pair: &KeyPair,
+    ca_issuer: &Issuer<'_, KeyPair>,
     entries: &[CrlEntry],
     validity_days: u32,
     crl_number: u64,
@@ -187,7 +171,7 @@ fn ecdsa_sign_crl(
         key_identifier_method: KeyIdMethod::Sha256,
     };
 
-    let crl = crl_params.signed_by(ca_cert, ca_key_pair)?;
+    let crl = crl_params.signed_by(ca_issuer)?;
     Ok(crl.pem()?)
 }
 
