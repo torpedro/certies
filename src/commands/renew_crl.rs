@@ -36,7 +36,10 @@ pub fn run_with_extra(store: &Store, validity_days: u32) -> Result<()> {
         .revoked_entries()?
         .into_iter()
         .filter_map(|entry| {
-            entry.revoked_at.map(|revoked_at| CrlEntry { serial: entry.serial, revoked_at })
+            entry.revoked_at.map(|revoked_at| CrlEntry {
+                serial: entry.serial,
+                revoked_at,
+            })
         })
         .collect();
 
@@ -51,16 +54,18 @@ pub fn run_with_extra(store: &Store, validity_days: u32) -> Result<()> {
         .with_context(|| format!("cannot write {}", crl_path.display()))?;
 
     let next_update_chrono = chrono::DateTime::from_timestamp(
-        (time::OffsetDateTime::now_utc()
-            + time::Duration::days(validity_days as i64))
-        .unix_timestamp(),
+        (time::OffsetDateTime::now_utc() + time::Duration::days(validity_days as i64))
+            .unix_timestamp(),
         0,
     )
     .unwrap();
 
     println!("CRL #{crl_number} written to {}", crl_path.display());
     println!("  Revoked entries: {}", entries.len());
-    println!("  Valid until:     {}", next_update_chrono.format("%Y-%m-%d"));
+    println!(
+        "  Valid until:     {}",
+        next_update_chrono.format("%Y-%m-%d")
+    );
 
     Ok(())
 }

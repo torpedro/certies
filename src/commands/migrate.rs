@@ -13,7 +13,10 @@ struct LegacyMeta {
 pub fn run(store: &Store) -> Result<()> {
     let legacy_meta_path = store.legacy_meta_path();
     if store.is_initialized() {
-        bail!("Store at {} already uses the OpenSSL-style database.", store.root.display());
+        bail!(
+            "Store at {} already uses the OpenSSL-style database.",
+            store.root.display()
+        );
     }
     if !legacy_meta_path.exists() {
         bail!(
@@ -62,7 +65,10 @@ pub fn run(store: &Store) -> Result<()> {
     })?;
 
     println!("Migrated store at {}", store.root.display());
-    println!("  serial:    next certificate serial #{:X}", legacy_meta.next_serial);
+    println!(
+        "  serial:    next certificate serial #{:X}",
+        legacy_meta.next_serial
+    );
     println!("  crlnumber: next CRL number #{:X}", next_crl_number);
     println!("  index.txt: {} certificate entries", entries.len());
     println!("  backup:    {}", backup_path.display());

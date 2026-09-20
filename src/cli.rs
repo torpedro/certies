@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 #[derive(Parser)]
-#[command(name = "certies", about = "SSL certificate manager for user authentication")]
+#[command(
+    name = "certies",
+    about = "SSL certificate manager for user authentication"
+)]
 pub struct Cli {
     /// Path to certificate store (default: ~/.certies; accepts [user@]server[:/path])
     #[arg(short, long, global = true)]

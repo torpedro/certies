@@ -134,7 +134,11 @@ impl Store {
             .map(format_index_line)
             .collect::<Vec<_>>()
             .join("\n");
-        let data = if data.is_empty() { data } else { format!("{data}\n") };
+        let data = if data.is_empty() {
+            data
+        } else {
+            format!("{data}\n")
+        };
         std::fs::write(self.index_path(), data).context("cannot write index.txt")
     }
 
@@ -199,8 +203,8 @@ fn take_hex_counter(path: &std::path::Path) -> Result<u64> {
 }
 
 fn read_hex_counter(path: &std::path::Path) -> Result<u64> {
-    let data = std::fs::read_to_string(path)
-        .with_context(|| format!("cannot read {}", path.display()))?;
+    let data =
+        std::fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
     u64::from_str_radix(data.trim(), 16)
         .with_context(|| format!("cannot parse hex counter in {}", path.display()))
 }

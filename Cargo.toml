@@ -15,6 +15,10 @@ exclude = ["docs/"]
 name = "certies"
 path = "src/main.rs"
 
+[features]
+# Build OpenSSL from source; used by CI on macOS and Windows runners.
+vendored-openssl = ["openssl/vendored"]
+
 [dependencies]
 anyhow = "1"
 foreign-types-shared = "0.1"

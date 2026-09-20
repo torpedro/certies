@@ -141,7 +141,10 @@ fn parse_target(value: &str) -> Result<Target> {
     if looks_local(value) {
         return Ok(Target::Local(expand_local_path(value)));
     }
-    Ok(Target::Remote(Remote { host: value.to_string(), path: "~/.certies".to_string() }))
+    Ok(Target::Remote(Remote {
+        host: value.to_string(),
+        path: "~/.certies".to_string(),
+    }))
 }
 
 fn parse_remote(value: &str) -> Result<Remote> {
@@ -152,7 +155,10 @@ fn parse_remote(value: &str) -> Result<Remote> {
     if host.is_empty() || path.is_empty() {
         bail!("remote must be in the form [user@]server[:/path]");
     }
-    Ok(Remote { host: host.to_string(), path: path.to_string() })
+    Ok(Remote {
+        host: host.to_string(),
+        path: path.to_string(),
+    })
 }
 
 fn looks_local(value: &str) -> bool {
@@ -176,18 +182,25 @@ fn expand_local_path(value: &str) -> PathBuf {
 }
 
 fn home_dir() -> PathBuf {
-    std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."))
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
 }
 
 fn backup_path(path: &Path, stamp: &str) -> PathBuf {
     path.with_extension(format!(
         "{}.bak.{}",
-        path.extension().and_then(|ext| ext.to_str()).unwrap_or("pem"),
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("pem"),
         stamp
     ))
 }
 
-fn read_target_files(target: &Target, files: &[SyncFile]) -> Result<HashMap<String, Option<Vec<u8>>>> {
+fn read_target_files(
+    target: &Target,
+    files: &[SyncFile],
+) -> Result<HashMap<String, Option<Vec<u8>>>> {
     match target {
         Target::Local(path) => read_local_files(path, files),
         Target::Remote(remote) => read_remote_files(remote, files),
@@ -201,7 +214,9 @@ fn load_source_files(source: &Target, files: &mut [SyncFile]) -> Result<()> {
             .get(file.store_name)
             .cloned()
             .flatten()
-            .with_context(|| format!("source {} is missing", source.file_display(file.store_name)))?;
+            .with_context(|| {
+                format!("source {} is missing", source.file_display(file.store_name))
+            })?;
     }
     Ok(())
 }
@@ -220,7 +235,10 @@ fn read_local_files(root: &Path, files: &[SyncFile]) -> Result<HashMap<String, O
     Ok(result)
 }
 
-fn read_remote_files(remote: &Remote, files: &[SyncFile]) -> Result<HashMap<String, Option<Vec<u8>>>> {
+fn read_remote_files(
+    remote: &Remote,
+    files: &[SyncFile],
+) -> Result<HashMap<String, Option<Vec<u8>>>> {
     let mut command = String::from(
         "read_one() { name=$1; path=$2; printf 'CERTIES_FILE\\t%s\\t' \"$name\"; if test -f \"$path\"; then printf 'present\\n'; base64 \"$path\"; printf '\\nCERTIES_END\\t%s\\n' \"$name\"; else printf 'missing\\n'; fi; };",
     );
@@ -283,7 +301,8 @@ fn deploy_remote_files(remote: &Remote, files: &[SyncFile]) -> Result<()> {
             file.label.replace('.', "_").to_uppercase(),
         ));
     }
-    write_remote_command(remote, "sh -s", Some(script.as_bytes())).context("cannot deploy files")?;
+    write_remote_command(remote, "sh -s", Some(script.as_bytes()))
+        .context("cannot deploy files")?;
     for file in files {
         println!("Deployed {}", file.label);
     }
@@ -315,7 +334,11 @@ fn download_target_to_source(source: &Target, files: &[SyncFile]) -> Result<()> 
     write_downloaded_files(source, &downloaded, &stamp)
 }
 
-fn write_downloaded_files(source: &Target, files: &[(&str, &str, &[u8])], stamp: &str) -> Result<()> {
+fn write_downloaded_files(
+    source: &Target,
+    files: &[(&str, &str, &[u8])],
+    stamp: &str,
+) -> Result<()> {
     match source {
         Target::Local(root) => {
             for file in files {
@@ -331,7 +354,10 @@ fn write_downloaded_files(source: &Target, files: &[(&str, &str, &[u8])], stamp:
             }
         }
         Target::Remote(remote) => {
-            let remote_files = files.iter().map(|file| (file.1, file.2)).collect::<Vec<_>>();
+            let remote_files = files
+                .iter()
+                .map(|file| (file.1, file.2))
+                .collect::<Vec<_>>();
             deploy_bytes_remote(remote, &remote_files)
                 .context("cannot download target files into remote source")?;
             for file in files {
@@ -362,7 +388,11 @@ fn write_remote_command(remote: &Remote, command: &str, input: Option<&[u8]>) ->
     let mut child = Command::new("ssh")
         .arg(&remote.host)
         .arg(command)
-        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::inherit())
         .stderr(Stdio::piped())
         .spawn()
@@ -452,7 +482,10 @@ fn print_diff(file: &SyncFile) {
     let result = match file.label {
         "ca.crt" => print_cert_diff(&file.source, target),
         "crl.pem" => print_crl_diff(&file.source, target),
-        _ => Err(anyhow::anyhow!("no semantic diff available for {}", file.label)),
+        _ => Err(anyhow::anyhow!(
+            "no semantic diff available for {}",
+            file.label
+        )),
     };
 
     if let Err(err) = result {
@@ -484,9 +517,21 @@ fn print_cert_diff(local: &[u8], remote: &[u8]) -> Result<()> {
 
     print_field_diff("subject", &local.subject, &remote.subject);
     print_field_diff("issuer", &local.issuer, &remote.issuer);
-    print_field_diff("serial", &serial_hex(local.serial), &serial_hex(remote.serial));
-    print_field_diff("not before", &fmt_time(local.not_before), &fmt_time(remote.not_before));
-    print_field_diff("not after", &fmt_time(local.not_after), &fmt_time(remote.not_after));
+    print_field_diff(
+        "serial",
+        &serial_hex(local.serial),
+        &serial_hex(remote.serial),
+    );
+    print_field_diff(
+        "not before",
+        &fmt_time(local.not_before),
+        &fmt_time(remote.not_before),
+    );
+    print_field_diff(
+        "not after",
+        &fmt_time(local.not_after),
+        &fmt_time(remote.not_after),
+    );
     print_field_diff(
         "public key algorithm",
         &local.public_key_algorithm,
@@ -501,21 +546,41 @@ fn print_crl_diff(local: &[u8], remote: &[u8]) -> Result<()> {
     let remote = parse_crl_summary(remote)?;
 
     print_field_diff("issuer", &local.issuer, &remote.issuer);
-    print_field_diff("last update", &fmt_time(local.last_update), &fmt_time(remote.last_update));
+    print_field_diff(
+        "last update",
+        &fmt_time(local.last_update),
+        &fmt_time(remote.last_update),
+    );
     print_field_diff(
         "next update",
-        &local.next_update.map(fmt_time).unwrap_or_else(|| "(none)".to_string()),
-        &remote.next_update.map(fmt_time).unwrap_or_else(|| "(none)".to_string()),
+        &local
+            .next_update
+            .map(fmt_time)
+            .unwrap_or_else(|| "(none)".to_string()),
+        &remote
+            .next_update
+            .map(fmt_time)
+            .unwrap_or_else(|| "(none)".to_string()),
     );
     print_field_diff(
         "CRL number",
-        &local.number.map(serial_hex).unwrap_or_else(|| "(none)".to_string()),
-        &remote.number.map(serial_hex).unwrap_or_else(|| "(none)".to_string()),
+        &local
+            .number
+            .map(serial_hex)
+            .unwrap_or_else(|| "(none)".to_string()),
+        &remote
+            .number
+            .map(serial_hex)
+            .unwrap_or_else(|| "(none)".to_string()),
     );
 
     for (serial, local_revoked_at) in &local.revoked {
         match remote.revoked.get(serial) {
-            None => println!("    revoked only local:  {} at {}", serial_hex(*serial), fmt_time(*local_revoked_at)),
+            None => println!(
+                "    revoked only local:  {} at {}",
+                serial_hex(*serial),
+                fmt_time(*local_revoked_at)
+            ),
             Some(remote_revoked_at) if remote_revoked_at != local_revoked_at => {
                 println!(
                     "    revoked date differs for {}: local {}, remote {}",
@@ -529,7 +594,11 @@ fn print_crl_diff(local: &[u8], remote: &[u8]) -> Result<()> {
     }
     for (serial, remote_revoked_at) in &remote.revoked {
         if !local.revoked.contains_key(serial) {
-            println!("    revoked only remote: {} at {}", serial_hex(*serial), fmt_time(*remote_revoked_at));
+            println!(
+                "    revoked only remote: {} at {}",
+                serial_hex(*serial),
+                fmt_time(*remote_revoked_at)
+            );
         }
     }
 
@@ -553,21 +622,28 @@ fn parse_cert_summary(pem: &[u8]) -> Result<CertSummary> {
 }
 
 fn parse_crl_summary(pem: &[u8]) -> Result<CrlSummary> {
-    let (_, pem) = parse_x509_pem(pem)
-        .map_err(|err| anyhow::anyhow!("failed to parse CRL PEM: {err:?}"))?;
+    let (_, pem) =
+        parse_x509_pem(pem).map_err(|err| anyhow::anyhow!("failed to parse CRL PEM: {err:?}"))?;
     let (_, crl) = CertificateRevocationList::from_der(&pem.contents)
         .map_err(|err| anyhow::anyhow!("failed to parse CRL DER: {err:?}"))?;
 
     let revoked = crl
         .iter_revoked_certificates()
-        .map(|entry| (bytes_to_serial(entry.raw_serial()), ts(entry.revocation_date.timestamp())))
+        .map(|entry| {
+            (
+                bytes_to_serial(entry.raw_serial()),
+                ts(entry.revocation_date.timestamp()),
+            )
+        })
         .collect();
 
     Ok(CrlSummary {
         issuer: crl.issuer().to_string(),
         last_update: ts(crl.last_update().timestamp()),
         next_update: crl.next_update().map(|time| ts(time.timestamp())),
-        number: crl.crl_number().and_then(|number| number.to_u64_digits().last().copied()),
+        number: crl
+            .crl_number()
+            .and_then(|number| number.to_u64_digits().last().copied()),
         revoked,
     })
 }
@@ -579,7 +655,9 @@ fn print_field_diff(label: &str, local: &str, remote: &str) {
 }
 
 fn bytes_to_serial(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0u64, |acc, &byte| (acc << 8) | byte as u64)
+    bytes
+        .iter()
+        .fold(0u64, |acc, &byte| (acc << 8) | byte as u64)
 }
 
 fn serial_hex(serial: u64) -> String {

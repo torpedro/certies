@@ -54,12 +54,19 @@ pub fn run(store: &Store) -> Result<()> {
     println!();
     println!("CRL");
     match &crl {
-        None => println!("  Status: {}", red("not generated (run `certies renew-crl`)")),
+        None => println!(
+            "  Status: {}",
+            red("not generated (run `certies renew-crl`)")
+        ),
         Some(c) => {
             println!("  Last renewed: {}", c.last_update.format("%Y-%m-%d"));
             if let Some(next) = c.next_update {
                 let days_left = (next - now).num_days();
-                println!("  Next update:  {} ({} days)", next.format("%Y-%m-%d"), days_left);
+                println!(
+                    "  Next update:  {} ({} days)",
+                    next.format("%Y-%m-%d"),
+                    days_left
+                );
                 if days_left < 0 {
                     println!("  Status:       {}", red("EXPIRED — renew immediately"));
                 } else if days_left < 7 {
@@ -92,8 +99,8 @@ pub fn run(store: &Store) -> Result<()> {
     let col = 20;
     let type_col = 8;
     println!(
-        "  {:<col$} {:<col$} {:<8} {:<type_col$} {:<12} {:<12} {}",
-        "Client", "Device", "Serial", "Key", "Created", "Expires", "Status"
+        "  {:<col$} {:<col$} {:<8} {:<type_col$} {:<12} {:<12} Status",
+        "Client", "Device", "Serial", "Key", "Created", "Expires"
     );
     println!("  {}", "-".repeat(95));
 

@@ -42,18 +42,30 @@ fn run_store_command(command: Commands, store: Option<String>) -> Result<()> {
 
 fn run_local_command(command: Commands, store: &Store) -> Result<()> {
     match command {
-        Commands::Init { name, validity_days } => {
-            commands::init_ca::run(&store, name, validity_days)
-        }
-        Commands::New { client, device, validity_days, key_password, p12_password } => {
-            commands::new::run(&store, client, device, validity_days, key_password, p12_password)
-        }
-        Commands::Revoke { client, device } => commands::revoke::run(&store, client, device),
-        Commands::Status => commands::status::run(&store),
-        Commands::RenewCrl { validity_days } => commands::renew_crl::run(&store, validity_days),
+        Commands::Init {
+            name,
+            validity_days,
+        } => commands::init_ca::run(store, name, validity_days),
+        Commands::New {
+            client,
+            device,
+            validity_days,
+            key_password,
+            p12_password,
+        } => commands::new::run(
+            store,
+            client,
+            device,
+            validity_days,
+            key_password,
+            p12_password,
+        ),
+        Commands::Revoke { client, device } => commands::revoke::run(store, client, device),
+        Commands::Status => commands::status::run(store),
+        Commands::RenewCrl { validity_days } => commands::renew_crl::run(store, validity_days),
         Commands::Sync { .. } => unreachable!(),
-        Commands::Migrate => commands::migrate::run(&store),
-        Commands::Reset => commands::reset::run(&store),
+        Commands::Migrate => commands::migrate::run(store),
+        Commands::Reset => commands::reset::run(store),
     }
 }
 
@@ -93,7 +105,10 @@ fn parse_remote_store(value: &str) -> Result<RemoteStore> {
     if host.is_empty() || path.is_empty() {
         bail!("remote store must be in the form [user@]server[:/path]");
     }
-    Ok(RemoteStore { host: host.to_string(), path: path.to_string() })
+    Ok(RemoteStore {
+        host: host.to_string(),
+        path: path.to_string(),
+    })
 }
 
 fn remote_temp_dir() -> Result<PathBuf> {
@@ -103,8 +118,7 @@ fn remote_temp_dir() -> Result<PathBuf> {
         std::process::id(),
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
     ));
-    std::fs::create_dir_all(&path)
-        .with_context(|| format!("cannot create {}", path.display()))?;
+    std::fs::create_dir_all(&path).with_context(|| format!("cannot create {}", path.display()))?;
     Ok(path)
 }
 

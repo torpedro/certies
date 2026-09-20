@@ -15,6 +15,9 @@ pub struct CrlEntry {
     pub revoked_at: DateTime<Utc>,
 }
 
+// One signer is constructed per run and moved into place, so the size
+// difference between variants does not justify boxing.
+#[allow(clippy::large_enum_variant)]
 pub enum CaSigner {
     Ecdsa {
         ca_cert: rcgen::Certificate,
@@ -40,7 +43,11 @@ impl CaSigner {
             Id::RSA => {
                 let ca_x509 = X509::from_pem(ca_cert_pem.as_bytes())
                     .context("cannot parse CA certificate")?;
-                Ok(CaSigner::Rsa { ca_pkey: pkey, ca_x509, ca_cert_pem })
+                Ok(CaSigner::Rsa {
+                    ca_pkey: pkey,
+                    ca_x509,
+                    ca_cert_pem,
+                })
             }
             _ => {
                 let ca_key_pair =
@@ -48,7 +55,11 @@ impl CaSigner {
                 let ca_params = CertificateParams::from_ca_cert_pem(&ca_cert_pem)
                     .context("cannot load CA cert into rcgen")?;
                 let ca_cert = ca_params.self_signed(&ca_key_pair)?;
-                Ok(CaSigner::Ecdsa { ca_cert, ca_key_pair, ca_cert_pem })
+                Ok(CaSigner::Ecdsa {
+                    ca_cert,
+                    ca_key_pair,
+                    ca_cert_pem,
+                })
             }
         }
     }
@@ -70,12 +81,21 @@ impl CaSigner {
         validity_days: u32,
     ) -> Result<String> {
         match self {
-            CaSigner::Ecdsa { ca_cert, ca_key_pair, .. } => {
-                ecdsa_sign_client_cert(ca_cert, ca_key_pair, cn, client_key_pem, serial, validity_days)
-            }
-            CaSigner::Rsa { ca_pkey, ca_x509, .. } => {
-                rsa_sign_client_cert(ca_pkey, ca_x509, cn, client_key_pem, serial, validity_days)
-            }
+            CaSigner::Ecdsa {
+                ca_cert,
+                ca_key_pair,
+                ..
+            } => ecdsa_sign_client_cert(
+                ca_cert,
+                ca_key_pair,
+                cn,
+                client_key_pem,
+                serial,
+                validity_days,
+            ),
+            CaSigner::Rsa {
+                ca_pkey, ca_x509, ..
+            } => rsa_sign_client_cert(ca_pkey, ca_x509, cn, client_key_pem, serial, validity_days),
         }
     }
 
@@ -87,12 +107,14 @@ impl CaSigner {
         crl_number: u64,
     ) -> Result<String> {
         match self {
-            CaSigner::Ecdsa { ca_cert, ca_key_pair, .. } => {
-                ecdsa_sign_crl(ca_cert, ca_key_pair, entries, validity_days, crl_number)
-            }
-            CaSigner::Rsa { ca_pkey, ca_x509, .. } => {
-                rsa_sign_crl(ca_pkey, ca_x509, entries, validity_days, crl_number)
-            }
+            CaSigner::Ecdsa {
+                ca_cert,
+                ca_key_pair,
+                ..
+            } => ecdsa_sign_crl(ca_cert, ca_key_pair, entries, validity_days, crl_number),
+            CaSigner::Rsa {
+                ca_pkey, ca_x509, ..
+            } => rsa_sign_crl(ca_pkey, ca_x509, entries, validity_days, crl_number),
         }
     }
 }
@@ -107,14 +129,18 @@ fn ecdsa_sign_client_cert(
     serial: u64,
     validity_days: u32,
 ) -> Result<String> {
-    use rcgen::{CertificateParams, ExtendedKeyUsagePurpose, KeyPair, KeyUsagePurpose, SerialNumber};
+    use rcgen::{
+        CertificateParams, ExtendedKeyUsagePurpose, KeyPair, KeyUsagePurpose, SerialNumber,
+    };
     use time::Duration;
 
     let client_key_pair = KeyPair::from_pem(client_key_pem)?;
     let now = time::OffsetDateTime::now_utc();
 
     let mut params = CertificateParams::new(vec![])?;
-    params.distinguished_name.push(rcgen::DnType::CommonName, cn);
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, cn);
     params.not_before = now;
     params.not_after = now + Duration::days(validity_days as i64);
     params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
@@ -175,8 +201,8 @@ fn rsa_sign_client_cert(
     serial: u64,
     validity_days: u32,
 ) -> Result<String> {
-    let client_pkey = PKey::private_key_from_pem(client_key_pem.as_bytes())
-        .context("cannot parse client key")?;
+    let client_pkey =
+        PKey::private_key_from_pem(client_key_pem.as_bytes()).context("cannot parse client key")?;
 
     let mut subject = X509NameBuilder::new()?;
     subject.append_entry_by_text("CN", cn)?;
@@ -289,12 +315,11 @@ fn rsa_sign_crl(
 
         let mut buf_ptr: *mut std::os::raw::c_char = std::ptr::null_mut();
         let len = ffi::BIO_get_mem_data(bio, &mut buf_ptr);
-        let pem =
-            std::slice::from_raw_parts(buf_ptr as *const u8, len as usize).to_vec();
+        let pem = std::slice::from_raw_parts(buf_ptr as *const u8, len as usize).to_vec();
 
         ffi::BIO_free_all(bio);
         ffi::X509_CRL_free(crl);
 
-        Ok(String::from_utf8(pem).context("CRL PEM was not valid UTF-8")?)
+        String::from_utf8(pem).context("CRL PEM was not valid UTF-8")
     }
 }

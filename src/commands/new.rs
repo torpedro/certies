@@ -35,7 +35,12 @@ pub fn run(
     let key_pem = client_key_pair.serialize_pem();
 
     let cert_pem = signer
-        .sign_client_cert(&format!("{client}/{device}"), &key_pem, serial, validity_days)
+        .sign_client_cert(
+            &format!("{client}/{device}"),
+            &key_pem,
+            serial,
+            validity_days,
+        )
         .context("failed to sign client certificate")?;
 
     let key_password = match key_password {
@@ -45,7 +50,11 @@ pub fn run(
                 "Key password for {client}/{device} (Enter to skip): "
             ))
             .context("failed to read key password")?;
-            if pw.is_empty() { None } else { Some(pw) }
+            if pw.is_empty() {
+                None
+            } else {
+                Some(pw)
+            }
         }
     };
 
@@ -65,9 +74,14 @@ pub fn run(
             .context("failed to read P12 password")?,
     };
 
-    let p12_der =
-        build_p12(&device, &key_pem, &cert_pem, signer.ca_cert_pem(), &p12_password)
-            .context("failed to build P12")?;
+    let p12_der = build_p12(
+        &device,
+        &key_pem,
+        &cert_pem,
+        signer.ca_cert_pem(),
+        &p12_password,
+    )
+    .context("failed to build P12")?;
 
     let key_path = client_dir.join(format!("{device}.key"));
     let cert_path = client_dir.join(format!("{device}.crt"));

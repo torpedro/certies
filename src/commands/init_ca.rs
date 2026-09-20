@@ -39,7 +39,9 @@ pub fn run(store: &Store, name: Option<String>, validity_days: Option<u32>) -> R
 
     let now = time::OffsetDateTime::now_utc();
     let mut params = CertificateParams::new(vec![])?;
-    params.distinguished_name.push(rcgen::DnType::CommonName, &name);
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, &name);
     params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     params.not_before = now;
     params.not_after = now + Duration::days(validity_days as i64);

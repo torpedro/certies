@@ -87,7 +87,9 @@ pub fn read_crl_info(store: &Store) -> Result<Option<CrlInfo>> {
     Ok(Some(CrlInfo {
         last_update: ts(crl.last_update().timestamp()),
         next_update: crl.next_update().map(|t| ts(t.timestamp())),
-        number: crl.crl_number().and_then(|n| n.to_u64_digits().last().copied()),
+        number: crl
+            .crl_number()
+            .and_then(|n| n.to_u64_digits().last().copied()),
         entries,
     }))
 }
@@ -182,7 +184,13 @@ fn key_type_from_cert(cert: &X509Certificate) -> String {
     // OID 1.2.840.113549.1.1.1 = rsaEncryption
     // OID 1.2.840.10045.2.1    = id-ecPublicKey
     // OID 1.3.101.112          = Ed25519
-    match cert.public_key().algorithm.algorithm.to_id_string().as_str() {
+    match cert
+        .public_key()
+        .algorithm
+        .algorithm
+        .to_id_string()
+        .as_str()
+    {
         "1.2.840.10045.2.1" => "ECDSA".to_string(),
         "1.3.101.112" => "Ed25519".to_string(),
         "1.2.840.113549.1.1.1" => "RSA".to_string(),
