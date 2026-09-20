@@ -693,3 +693,304 @@ fn remote_shell_path(value: &str) -> String {
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn local(target: &Target) -> &Path {
+        match target {
+            Target::Local(path) => path,
+            Target::Remote(remote) => panic!("expected local, got {}:{}", remote.host, remote.path),
+        }
+    }
+
+    fn remote(target: &Target) -> &Remote {
+        match target {
+            Target::Remote(remote) => remote,
+            Target::Local(path) => panic!("expected remote, got {}", path.display()),
+        }
+    }
+
+    // ── target parsing ────────────────────────────────────────────────────────
+
+    #[test]
+    fn absolute_and_relative_paths_are_local() {
+        for value in ["/srv/certies", "./certies", "../certies", ".", ".."] {
+            let target = parse_target(value).unwrap();
+            assert_eq!(local(&target), Path::new(value), "{value}");
+        }
+    }
+
+    #[test]
+    fn a_bare_hostname_is_remote_with_the_default_store() {
+        let target = parse_target("server").unwrap();
+        assert_eq!(remote(&target).host, "server");
+        assert_eq!(remote(&target).path, "~/.certies");
+    }
+
+    #[test]
+    fn host_and_path_are_split_at_the_first_colon() {
+        let target = parse_target("user@server:/srv/certies").unwrap();
+        assert_eq!(remote(&target).host, "user@server");
+        assert_eq!(remote(&target).path, "/srv/certies");
+    }
+
+    #[test]
+    fn parse_target_rejects_an_empty_host_or_path() {
+        assert!(parse_target(":/srv/certies").is_err());
+        assert!(parse_target("server:").is_err());
+    }
+
+    #[test]
+    fn windows_drive_paths_are_misread_as_remote() {
+        // KNOWN BUG: `parse_target` tests for ':' *before* `looks_local`, so a
+        // Windows absolute path becomes host "C". Mirrors the same bug in
+        // `main.rs::is_remote_store`; both need to learn about drive letters.
+        let target = parse_target(r"C:\certies").unwrap();
+        assert_eq!(remote(&target).host, "C");
+        assert_eq!(remote(&target).path, r"\certies");
+    }
+
+    #[test]
+    fn unc_paths_fall_through_to_a_remote_hostname() {
+        // KNOWN BUG: no ':' and not an existing path, so a UNC share is taken
+        // for a hostname rather than a local directory.
+        let target = parse_target(r"\\server\share").unwrap();
+        assert_eq!(remote(&target).host, r"\\server\share");
+    }
+
+    #[test]
+    fn looks_local_recognises_path_shapes() {
+        for value in ["/abs", "./rel", "../up", ".", "..", "~/store"] {
+            assert!(looks_local(value), "{value} should look local");
+        }
+        for value in ["server", "user@server", "certies"] {
+            assert!(!looks_local(value), "{value} should not look local");
+        }
+    }
+
+    #[test]
+    fn looks_local_accepts_any_path_that_exists() {
+        // A bare name that happens to exist on disk wins over the host reading.
+        assert!(looks_local("Cargo.toml"));
+    }
+
+    // ── tilde expansion ───────────────────────────────────────────────────────
+
+    #[test]
+    fn expand_local_path_leaves_ordinary_paths_alone() {
+        assert_eq!(
+            expand_local_path("/srv/certies"),
+            PathBuf::from("/srv/certies")
+        );
+        assert_eq!(expand_local_path("./certies"), PathBuf::from("./certies"));
+        // Only a leading "~/" is special; a tilde inside the path is literal.
+        assert_eq!(expand_local_path("/srv/~/x"), PathBuf::from("/srv/~/x"));
+    }
+
+    #[test]
+    fn expand_local_path_expands_a_leading_tilde() {
+        let home = home_dir();
+        assert_eq!(expand_local_path("~"), home);
+        assert_eq!(expand_local_path("~/.certies"), home.join(".certies"));
+    }
+
+    #[test]
+    fn home_dir_falls_back_to_the_current_directory() {
+        // KNOWN GAP: `home_dir` reads only $HOME, which is unset on Windows
+        // (it uses %USERPROFILE%), so "~/.certies" silently resolves to
+        // "./.certies" there instead of failing or finding the real home.
+        if std::env::var("HOME").is_err() {
+            assert_eq!(home_dir(), PathBuf::from("."));
+        } else {
+            assert!(home_dir().is_absolute());
+        }
+    }
+
+    // ── serial rendering ──────────────────────────────────────────────────────
+
+    #[test]
+    fn bytes_to_serial_reads_big_endian() {
+        assert_eq!(bytes_to_serial(&[]), 0);
+        assert_eq!(bytes_to_serial(&[0x03]), 3);
+        assert_eq!(bytes_to_serial(&[0x01, 0x00]), 256);
+        assert_eq!(bytes_to_serial(&[0xDE, 0xAD, 0xBE, 0xEF]), 0xDEAD_BEEF);
+        assert_eq!(bytes_to_serial(&[0xFF; 8]), u64::MAX);
+    }
+
+    #[test]
+    fn bytes_to_serial_silently_truncates_long_serials() {
+        // KNOWN BUG: the fold shifts left without checking width, so anything
+        // past 8 bytes falls off the top. Real CAs issue 20-byte random
+        // serials, and `sync` renders serials from a *remote* CA that certies
+        // did not issue, so two unrelated certificates can be reported under
+        // the same serial in a diff. Only the low 8 bytes survive:
+        let long = [0xAA, 0xBB, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        assert_eq!(bytes_to_serial(&long), 0x1122_3344_5566_7788);
+        // ...which makes these two distinct serials indistinguishable.
+        let other = [0x99, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        assert_eq!(bytes_to_serial(&long), bytes_to_serial(&other));
+    }
+
+    #[test]
+    fn serial_hex_is_prefixed_and_uppercase() {
+        assert_eq!(serial_hex(3), "#3");
+        assert_eq!(serial_hex(255), "#FF");
+        assert_eq!(serial_hex(0xDEAD), "#DEAD");
+    }
+
+    #[test]
+    fn hex_is_lowercase_and_two_digits_per_byte() {
+        assert_eq!(hex(&[]), "");
+        assert_eq!(hex(&[0x00, 0x0f, 0xff]), "000fff");
+    }
+
+    // ── backup naming ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn backup_path_keeps_the_original_extension() {
+        assert_eq!(
+            backup_path(Path::new("/srv/certies/ca.crt"), "20260920-2100"),
+            PathBuf::from("/srv/certies/ca.crt.bak.20260920-2100")
+        );
+    }
+
+    #[test]
+    fn backup_path_defaults_the_extension_when_there_is_none() {
+        assert_eq!(
+            backup_path(Path::new("/srv/certies/ca"), "20260920-2100"),
+            PathBuf::from("/srv/certies/ca.pem.bak.20260920-2100")
+        );
+    }
+
+    #[test]
+    fn backups_of_the_same_file_at_different_stamps_do_not_collide() {
+        let path = Path::new("/srv/certies/crl.pem");
+        assert_ne!(backup_path(path, "a"), backup_path(path, "b"));
+    }
+
+    // ── remote command construction ───────────────────────────────────────────
+
+    #[test]
+    fn remote_file_path_joins_and_trims_a_trailing_slash() {
+        let remote = Remote {
+            host: "server".to_string(),
+            path: "/srv/certies/".to_string(),
+        };
+        assert_eq!(remote_file_path(&remote, "ca.crt"), "/srv/certies/ca.crt");
+    }
+
+    #[test]
+    fn shell_quote_neutralises_metacharacters() {
+        for value in ["a b", "a;rm -rf /", "a$(id)", "a`id`", "a|b", "a\nb"] {
+            let quoted = shell_quote(value);
+            assert!(
+                quoted.starts_with('\'') && quoted.ends_with('\''),
+                "{quoted}"
+            );
+            assert!(!quoted[1..quoted.len() - 1].contains('\''), "{quoted}");
+        }
+    }
+
+    #[test]
+    fn shell_quote_escapes_embedded_single_quotes() {
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+    }
+
+    #[test]
+    fn remote_shell_path_expands_tilde_and_quotes_the_tail() {
+        assert_eq!(remote_shell_path("~"), "$HOME");
+        assert_eq!(remote_shell_path("~/.certies"), "$HOME/'.certies'");
+        assert_eq!(remote_shell_path("~/a$(id)"), "$HOME/'a$(id)'");
+        assert_eq!(remote_shell_path("/srv/certies"), "'/srv/certies'");
+    }
+
+    // ── remote tar listing ────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_remote_files_reads_a_present_file() {
+        let encoded = base64::encode_block(b"hello");
+        let output = format!("CERTIES_FILE\tca.crt\tpresent\n{encoded}\nCERTIES_END\tca.crt\n");
+        let files = parse_remote_files(output.as_bytes()).unwrap();
+        assert_eq!(files.get("ca.crt").unwrap().as_deref(), Some(&b"hello"[..]));
+    }
+
+    #[test]
+    fn parse_remote_files_reads_a_missing_file_as_none() {
+        let files = parse_remote_files(b"CERTIES_FILE\tcrl.pem\tmissing\n").unwrap();
+        assert!(files.contains_key("crl.pem"));
+        assert_eq!(files.get("crl.pem").unwrap(), &None);
+    }
+
+    #[test]
+    fn parse_remote_files_reassembles_wrapped_base64() {
+        // `base64` wraps at 76 columns, so a real payload spans many lines.
+        let payload: Vec<u8> = (0..200u32).map(|i| (i % 251) as u8).collect();
+        let encoded = base64::encode_block(&payload);
+        let wrapped: Vec<String> = encoded
+            .as_bytes()
+            .chunks(76)
+            .map(|c| String::from_utf8(c.to_vec()).unwrap())
+            .collect();
+        assert!(wrapped.len() > 1, "test needs a multi-line payload");
+        let output = format!(
+            "CERTIES_FILE\tca.crt\tpresent\n{}\nCERTIES_END\tca.crt\n",
+            wrapped.join("\n")
+        );
+
+        let files = parse_remote_files(output.as_bytes()).unwrap();
+        assert_eq!(files.get("ca.crt").unwrap().as_deref(), Some(&payload[..]));
+    }
+
+    #[test]
+    fn parse_remote_files_handles_several_files_in_one_response() {
+        let encoded = base64::encode_block(b"pem");
+        let output = format!(
+            "CERTIES_FILE\tca.crt\tpresent\n{encoded}\nCERTIES_END\tca.crt\n\
+             CERTIES_FILE\tcrl.pem\tmissing\n"
+        );
+        let files = parse_remote_files(output.as_bytes()).unwrap();
+        assert_eq!(files.len(), 2);
+        assert_eq!(files.get("ca.crt").unwrap().as_deref(), Some(&b"pem"[..]));
+        assert_eq!(files.get("crl.pem").unwrap(), &None);
+    }
+
+    #[test]
+    fn parse_remote_files_ignores_unrelated_shell_chatter() {
+        // Login banners and stderr noise share the stream; only tagged lines count.
+        let encoded = base64::encode_block(b"hi");
+        let output = format!(
+            "Welcome to the server\nLast login: today\n\
+             CERTIES_FILE\tca.crt\tpresent\n{encoded}\nCERTIES_END\tca.crt\n"
+        );
+        let files = parse_remote_files(output.as_bytes()).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files.get("ca.crt").unwrap().as_deref(), Some(&b"hi"[..]));
+    }
+
+    #[test]
+    fn parse_remote_files_reads_an_empty_listing() {
+        assert!(parse_remote_files(b"").unwrap().is_empty());
+        assert!(parse_remote_files(b"\n").unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_remote_files_rejects_an_unknown_status() {
+        let err = parse_remote_files(b"CERTIES_FILE\tca.crt\tconfused\n").unwrap_err();
+        assert!(
+            err.to_string().contains("unexpected remote sync response"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_remote_files_rejects_undecodable_payload() {
+        let output = "CERTIES_FILE\tca.crt\tpresent\n!!!!\nCERTIES_END\tca.crt\n";
+        let err = parse_remote_files(output.as_bytes()).unwrap_err();
+        assert!(
+            err.to_string().contains("cannot decode remote"),
+            "unexpected error: {err}"
+        );
+    }
+}

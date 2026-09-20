@@ -217,3 +217,144 @@ fn remote_shell_path(value: &str) -> String {
         shell_quote(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── local vs. remote store dispatch ───────────────────────────────────────
+
+    #[test]
+    fn plain_paths_are_local() {
+        for value in ["/abs/path", "./rel", "../up", ".", "~/.certies", "certies"] {
+            assert!(!is_remote_store(value), "{value} should be local");
+        }
+    }
+
+    #[test]
+    fn ssh_style_values_are_remote() {
+        for value in [
+            "user@server",
+            "server:/srv/certies",
+            "user@server:/srv/certies",
+            "user@server:~/.certies",
+        ] {
+            assert!(is_remote_store(value), "{value} should be remote");
+        }
+    }
+
+    #[test]
+    fn a_bare_hostname_without_a_colon_is_not_detected_as_remote() {
+        // KNOWN GAP: `certies -s server status` (no '@' and no ':') is treated
+        // as a local relative directory named "server". `sync::parse_target`
+        // takes the opposite view and treats a bare word as a host. The two
+        // dispatchers disagree; this pins the `main.rs` side.
+        assert!(!is_remote_store("server"));
+    }
+
+    #[test]
+    fn windows_drive_paths_are_misread_as_remote() {
+        // KNOWN BUG: dispatch keys off a bare ':' , so a Windows absolute path
+        // parses as host "C" plus path "\\certies" and certies shells out to
+        // ssh instead of opening the local store. Windows is a supported CI
+        // target, so this is live. Pinned here; fixing it means teaching
+        // `is_remote_store` about drive letters (and UNC paths, below).
+        assert!(is_remote_store(r"C:\certies"));
+        assert_eq!(parse_remote_store(r"C:\certies").unwrap().host, "C");
+        assert_eq!(parse_remote_store(r"C:\certies").unwrap().path, r"\certies");
+    }
+
+    #[test]
+    fn unc_paths_are_treated_as_local() {
+        // No ':' and no '@', so this one happens to land on the local path.
+        assert!(!is_remote_store(r"\\server\share\certies"));
+    }
+
+    // ── remote store parsing ──────────────────────────────────────────────────
+
+    #[test]
+    fn remote_without_a_path_defaults_to_the_home_store() {
+        let remote = parse_remote_store("user@server").unwrap();
+        assert_eq!(remote.host, "user@server");
+        assert_eq!(remote.path, "~/.certies");
+    }
+
+    #[test]
+    fn remote_splits_host_from_path_at_the_first_colon() {
+        let remote = parse_remote_store("user@server:/srv/certies").unwrap();
+        assert_eq!(remote.host, "user@server");
+        assert_eq!(remote.path, "/srv/certies");
+    }
+
+    #[test]
+    fn remote_keeps_later_colons_in_the_path() {
+        let remote = parse_remote_store("server:/srv/odd:name").unwrap();
+        assert_eq!(remote.host, "server");
+        assert_eq!(remote.path, "/srv/odd:name");
+    }
+
+    #[test]
+    fn remote_rejects_an_empty_host_or_path() {
+        assert!(parse_remote_store(":/srv/certies").is_err());
+        assert!(parse_remote_store("server:").is_err());
+    }
+
+    // ── shell quoting for the ssh command line ────────────────────────────────
+
+    #[test]
+    fn shell_quote_wraps_plain_values() {
+        assert_eq!(shell_quote("/srv/certies"), "'/srv/certies'");
+    }
+
+    #[test]
+    fn shell_quote_neutralises_metacharacters() {
+        for value in [
+            "a b",
+            "a;rm -rf /",
+            "a$(id)",
+            "a`id`",
+            "a&b",
+            "a|b",
+            "a\nb",
+            "a*b",
+        ] {
+            let quoted = shell_quote(value);
+            assert!(
+                quoted.starts_with('\'') && quoted.ends_with('\''),
+                "{quoted}"
+            );
+            // Nothing between the outer quotes may close them.
+            assert!(!quoted[1..quoted.len() - 1].contains('\''), "{quoted}");
+        }
+    }
+
+    #[test]
+    fn shell_quote_escapes_embedded_single_quotes() {
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+        assert_eq!(shell_quote("'"), r"''\'''");
+    }
+
+    #[test]
+    fn remote_shell_path_expands_a_bare_tilde_unquoted() {
+        // Must stay unquoted so the remote shell expands it.
+        assert_eq!(remote_shell_path("~"), "$HOME");
+    }
+
+    #[test]
+    fn remote_shell_path_expands_tilde_and_quotes_only_the_tail() {
+        assert_eq!(remote_shell_path("~/.certies"), "$HOME/'.certies'");
+        assert_eq!(remote_shell_path("~/my certies"), "$HOME/'my certies'");
+        assert_eq!(remote_shell_path("~/a$(id)"), "$HOME/'a$(id)'");
+    }
+
+    #[test]
+    fn remote_shell_path_quotes_absolute_paths_whole() {
+        assert_eq!(remote_shell_path("/srv/certies"), "'/srv/certies'");
+        assert_eq!(remote_shell_path("/srv/a b"), "'/srv/a b'");
+    }
+
+    #[test]
+    fn remote_shell_path_does_not_expand_a_tilde_inside_the_path() {
+        assert_eq!(remote_shell_path("/srv/~/certies"), "'/srv/~/certies'");
+    }
+}
