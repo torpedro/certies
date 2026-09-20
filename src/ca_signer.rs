@@ -292,7 +292,8 @@ fn rsa_sign_crl(
             ffi::NID_crl_number,
             crl_num_asn1.as_ptr() as *mut _,
             0,
-            0u64,
+            // Inferred as c_ulong: 64-bit on unix LP64, 32-bit on Windows LLP64.
+            0,
         );
 
         ffi::X509_CRL_sort(crl);
