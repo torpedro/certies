@@ -23,7 +23,7 @@ vendored-openssl = ["openssl/vendored"]
 anyhow = "1"
 # Pinned to 0.1 on purpose: this must match the `foreign-types` version that
 # openssl 0.10 uses, so that `ForeignType` applies to openssl's types.
-foreign-types-shared = "0.1"
+foreign-types-shared = "0.3"
 openssl = "0.10"
 openssl-sys = "0.9"
 rpassword = "7"
