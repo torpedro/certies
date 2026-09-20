@@ -1,6 +1,6 @@
 [package]
 name = "certies"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A command-line tool for managing SSL client certificates and a local Certificate Authority"
 license = "MIT"
