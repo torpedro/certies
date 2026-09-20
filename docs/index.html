@@ -159,9 +159,14 @@ Client certificates (4 total, 1 revoked):
     </section>
 
     <section id="install" class="section install">
-      <h2>Install from source</h2>
-      <pre><code>cargo install --path .</code></pre>
-      <p>Requires Rust and system OpenSSL headers.</p>
+      <h2>Install</h2>
+      <pre><code>cargo install certies</code></pre>
+      <p>This installs the <code>certies</code> binary to <code>~/.cargo/bin</code>. It requires Rust and system OpenSSL headers.</p>
+      <h3>Build from source</h3>
+      <pre><code>git clone https://github.com/torpedro/certies.git
+cd certies
+cargo build --release
+cargo install --path .</code></pre>
     </section>
   </main>
 </body>
