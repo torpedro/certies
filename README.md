@@ -4,15 +4,23 @@ A command-line tool for managing SSL client certificates used for user authentic
 
 Project site: [https://torpedro.github.io/certies/](https://torpedro.github.io/certies/)
 
-## Building
-
-Requires Rust and system OpenSSL headers (`libssl-dev` on Debian/Ubuntu, `openssl-devel` on Fedora).
+## Installation
 
 ```sh
+cargo install certies
+```
+
+This installs the `certies` binary to `~/.cargo/bin`. It requires Rust and system OpenSSL headers (`libssl-dev` on Debian/Ubuntu, `openssl-devel` on Fedora).
+
+## Building from source
+
+```sh
+git clone https://github.com/torpedro/certies.git
+cd certies
 cargo build --release
 ```
 
-The binary is placed at `target/release/certies`. To install it to `~/.cargo/bin`:
+The binary is placed at `target/release/certies`. To install the checkout to `~/.cargo/bin`:
 
 ```sh
 cargo install --path .
